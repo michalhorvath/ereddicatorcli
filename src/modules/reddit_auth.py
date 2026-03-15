@@ -3,8 +3,6 @@ import sys
 import configparser
 import praw
 from prawcore.exceptions import OAuthException, ResponseException
-import tkinter as tk
-from modules.gui import CredentialsInputGUI
 from modules.oauth_handler import RedditOAuth
 
 

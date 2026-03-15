@@ -1,4 +1,3 @@
-import tkinter as tk
 import time
 import signal
 import sys
@@ -8,7 +7,6 @@ import praw
 from modules.reddit_auth import RedditAuth
 from modules.reddit_content_remover import RedditContentRemover
 from modules.user_preferences import UserPreferences
-from modules.gui import RedditContentRemoverGUI
 
 
 def run_content_remover(preferences: UserPreferences, reddit: praw.Reddit, auth: RedditAuth) -> None:
