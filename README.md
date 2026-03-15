@@ -1,15 +1,19 @@
-# Ereddicator
+# EreddicatorCLI
 
-This Python script allows you to edit and/or delete all your Reddit comments, posts, saved items, upvotes, downvotes, and hidden posts. However, upvotes and downvotes on archived posts will remain. There is no way to undo them. You can disable "make my votes public" in your preferences: https://www.reddit.com/prefs/
+This Python CLI app allows you to edit and/or delete all your Reddit comments, posts, saved items, upvotes, downvotes, and hidden posts. However, upvotes and downvotes on archived posts will remain. There is no way to undo them. You can disable "make my votes public" in your preferences: https://www.reddit.com/prefs/
+
+> **Note:**
+> This project is a command-line fork of the original GUI application, [Ereddicator](https://github.com/Jelly-Pudding/ereddicator). It provides the same powerful content removal features but is optimized for terminal environments and automated workflows.
+
+> **Tip:**
+> If you are looking for an alternative CLI Reddit content deletion tool, you might also want to check out [shreddit](https://github.com/andrewbanchich/shreddit), an excellent well-maintained Rust-based project for managing your Reddit history.
 
 ## Contents
 
 - [Features](#features)
+- [Command Line Arguments](#command-line-arguments)
 - [Reddit Data Export Request](#reddit-data-export-request)
-- [Instructions (for Windows Users)](#instructions-for-windows-users)
 - [Instructions (for Python Users)](#instructions-for-python-users)
-  - [Installation](#installation)
-  - [Instructions](#instructions)
 - [Support Me](#buy-me-a-coffee)
 
 ## Features
@@ -39,6 +43,31 @@ This Python script allows you to edit and/or delete all your Reddit comments, po
 - **Persistent Processing**: Tracks which items have already been processed across multiple runs, ensuring that items are not processed again if the script is restarted or interrupted.
 - **Advertise Option**: When enabled, there's a 50% chance for each comment or post to be replaced with a simple message mentioning Ereddicator instead of random text or custom text.
 
+## Command Line Arguments
+
+You can run the script with the following arguments to set or override preferences:
+
+```text
+usage: main.py [-h]
+               [--delete | --delete_only | --edit_only]
+               [--dry_run]
+               [--whitelist WHITELIST [WHITELIST ...]
+               | --blacklist BLACKLIST [BLACKLIST ...]]
+
+EreddicatorCLI
+
+options:
+  -h, --help            show this help message and exit
+  --delete              Delete content after editing
+  --delete_only         Delete content without editing
+  --edit_only           Only edit content without deleting
+  --dry_run             Enable dry run mode (no actual changes made)
+  --whitelist WHITELIST [WHITELIST ...]
+                        List of subreddits to preserve (not process)
+  --blacklist BLACKLIST [BLACKLIST ...]
+                        List of subreddits to exclusively process
+```
+
 ## Reddit Data Export Request
 Reddit's API is limited and sometimes does not retrieve all comments and posts. If you want to ensure you get everything, you will need to make a Reddit data export request:
 
@@ -53,50 +82,15 @@ Reddit's API is limited and sometimes does not retrieve all comments and posts. 
 
 Reddit will process your request and send a message to your Reddit inbox (it is very fast usually and takes minutes, but it can take 1-2 days). The message will contain a download link. Extract the contents of the `.zip` file to a folder. You will then be able to select this folder when [using Ereddicator](#instructions-for-windows-users) (look for the `Reddit Export Directory` option).
 
-## Instructions (for Windows Users)
-
-If you don't want to install Python, you can use the `.exe` version of the script:
-
-1. **Optional First Step** - Make a Reddit data request ([see here for instructions](#reddit-data-export-request)). While Ereddicator works without this, using Reddit's data export ensures all of your content is processed.
-2. Obtain a `client_id` and `client_secret` and save these in a notepad file:
-   - Go to https://www.reddit.com/prefs/apps
-   - Click "Create App" or "Create Another App".
-   - You can name it anything. It does not matter.
-   - Choose "script" for personal use.
-   - For the "redirect uri", put http://localhost:8080
-
-   ![Creating Reddit App](images/create-app.png)
-
-   - After creation, the client_id is the string under "personal use script". For example, it may look like this: "AE9-zURLEvI1pze_rqH4Iw".
-   - The client_secret is what appears next to "secret". It will look like this: "ZeqnEO_F21BrzzgOpb_es4kOfbhTww"
-
-   ![Finding Client ID and Secret](images/client-id-and-secret.png)
-
-3. Download the latest `.zip` file from the [Releases](https://github.com/Jelly-Pudding/ereddicator/releases/) page.
-4. Extract the contents of the `.zip` file to a folder.
-5. Run the `ereddicator.exe` file by double-clicking it. You may see `Windows protected your PC`. Just click on `More Info` and then click `Run anyway`. 
-6. A terminal window will open. **Keep this terminal window open and visible throughout the entire process.** This terminal displays authentication status, error messages, and progress updates. Do not close or minimise it.
-7. A GUI window will also open. Enter your Reddit API credentials into it.
-   * **For traditional Reddit accounts**:
-     * If you use Two-Factor Authentication, enter your 2FA code in the "Two Factor Code" field. If you don't use 2FA, leave this field as is.
-     * Enter your client_id, client_secret, username, and password.
-   * **For users who use Reddit's "Login with Google"**:
-     * Select the "OAuth (Google Login)" option at the top
-     * Enter your `client_id` and `client_secret`
-     * Click "Authorise with Reddit" - this will open a browser window
-     * Log in to Reddit through Google in the browser and authorise the application
-     * Once authorised, you'll be redirected back to Ereddicator
-8. After you successfully authenticate, a new window opens. In this window, you can configure your preferences.
-9. Click "Start Content Removal" to begin the process. If you cannot see this button, then try to resize the window to make it bigger.
 
 ## Instructions (for Python Users)
 
 ### Installation
 
-1. Git clone this repository: `git clone https://github.com/Jelly-Pudding/ereddicator.git`
+1. Git clone this repository: `git clone https://github.com/michalhorvath/ereddicatorcli.git`
 2. Navigate to the project directory:
    ```
-   cd ereddicator
+   cd ereddicatorcli
    ```
 3. Install the required dependencies:
    ```
@@ -141,10 +135,6 @@ If you don't want to install Python, you can use the `.exe` version of the scrip
    # The refresh_token will be filled in after your first login
    ```
 5. Navigate to the `src` directory.
-6. Run the script using Python: `python main.py`.
+6. Run the script using Python: `python main.py` or provide arguments like `python main.py --delete --blacklist aww me_irl`. (See [Command Line Arguments](#command-line-arguments) for options).
 7. Keep the terminal where you ran the Python command visible throughout the entire process. This terminal displays authentication status, error messages, and progress updates.
 8. If you're using Google login, you'll be prompted to authorise via a browser. After successful authorisation, the refresh token will be saved for future use.
-9. Follow the on-screen instructions in the GUI to configure your preferences and start the content removal process.
-
-## Buy Me a Coffee
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/K3K715TC1R)
