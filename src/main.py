@@ -1,8 +1,9 @@
-import time
+import argparse
+import os
 import signal
 import sys
-import os
 import threading
+import time
 import praw
 from modules.reddit_auth import RedditAuth
 from modules.reddit_content_remover import RedditContentRemover
@@ -42,9 +43,6 @@ def run_content_remover(preferences: UserPreferences, reddit: praw.Reddit, auth:
         # Set a timer to force exit if graceful shutdown doesn't work
         def force_exit():
             print("\nForcing exit...")
-            if auth.is_exe:
-                print("Press Enter to exit...")
-                input()
             os._exit(1)
 
         timer = threading.Timer(5.0, force_exit)
@@ -91,50 +89,80 @@ def run_content_remover(preferences: UserPreferences, reddit: praw.Reddit, auth:
             print(f"{item_type.capitalize()} deleted: {count}")
         for item_type, count in content_remover.total_edited_dict.items():
             print(f"{item_type.capitalize()} edited: {count}")
-        if auth.is_exe:
-            print("\nPress Enter to exit...")
-            input()
 
 
 def main():
-    is_exe = getattr(sys, "frozen", False)
-    if is_exe:
-        print("Please enter your credential information in the window that pops up.\n"
-              "IMPORTANT: Keep this terminal window open and visible throughout the entire process.\n"
-              "This terminal will display authentication status, error messages, and progress updates.")
-
-    reddit = None
-    auth = None
+    # Parse arguments
+    parser = argparse.ArgumentParser(description="EreddicatorCLI")
+    
+    action_group = parser.add_mutually_exclusive_group()
+    action_group.add_argument("--delete", action="store_true", help="Delete content after editing")
+    action_group.add_argument("--delete_only", action="store_true", help="Delete content without editing")
+    action_group.add_argument("--edit_only", action="store_true", help="Only edit content without deleting")
+    
+    parser.add_argument("--dry_run", action="store_true", help="Enable dry run mode (no actual changes made)")
+    list_group = parser.add_mutually_exclusive_group()
+    list_group.add_argument("--whitelist", nargs="+", help="List of subreddits to preserve (not process)")
+    list_group.add_argument("--blacklist", nargs="+", help="List of subreddits to exclusively process")
+    
+    args = parser.parse_args()
 
     # Keep trying authentication until successful or user gives up.
+    reddit = None
+    auth = None
     while reddit is None:
         try:
             # Create an instance of RedditAuth and get the Reddit instance
-            auth = RedditAuth(is_exe=is_exe)
+            auth = RedditAuth()
             reddit = auth.get_reddit_instance()
         except Exception as e:
             error_message = str(e)
 
             if "cancelled by user" in error_message.lower() or "application has been destroyed" in error_message.lower():
                 print(f"\n{e}")
-                if is_exe:
-                    print("Press Enter to exit...")
-                    input()
                 return
 
             print(f"\n{e}")
-            if is_exe:
-                print("\nWould you like to try again? The credentials window will reopen.")
-                print("If you want to quit close this terminal window.")
-                continue
-            else:
-                print("Please check your reddit_credentials.ini file and run the program again.")
-                return
+            print("Please check your reddit_credentials.ini file and run the program again.")
+            return
+    
+    # Load user preferences
 
-    root = tk.Tk()
-    root.tk.call("tk", "scaling", 1.0)  # This ensures consistent sizing across different DPI settings
-    _ = RedditContentRemoverGUI(root, start_removal_callback=lambda prefs: run_content_remover(prefs, reddit, auth))
-    root.mainloop()
+    preferences = UserPreferences()
+    
+    if args.delete:
+        preferences.delete_comments = True
+        preferences.delete_posts = True
+        preferences.only_edit_comments = False
+        preferences.only_edit_posts = False
+        preferences.delete_without_edit_comments = False
+        preferences.delete_without_edit_posts = False
+    elif args.delete_only:
+        preferences.delete_without_edit_comments = True
+        preferences.delete_without_edit_posts = True
+        preferences.delete_comments = False
+        preferences.delete_posts = False
+        preferences.only_edit_comments = False
+        preferences.only_edit_posts = False
+    elif args.edit_only:
+        preferences.only_edit_comments = True
+        preferences.only_edit_posts = True
+        preferences.delete_comments = False
+        preferences.delete_posts = False
+        preferences.delete_without_edit_comments = False
+        preferences.delete_without_edit_posts = False
+
+    if args.dry_run:
+        preferences.dry_run = True
+
+    if args.whitelist:
+        preferences.whitelist_subreddits = args.whitelist
+
+    if args.blacklist:
+        preferences.blacklist_subreddits = args.blacklist
+
+    # Execute content remover
+    run_content_remover(preferences, reddit, auth)
 
 
 if __name__ == "__main__":

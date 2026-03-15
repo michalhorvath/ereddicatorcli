@@ -14,16 +14,14 @@ class RedditAuth:
     and creates an authenticated Reddit instance.
     """
 
-    def __init__(self, is_exe: bool = False, file_path: str = "reddit_credentials.ini", user_agent: str = "ereddicator") -> None:
+    def __init__(self, file_path: str = "reddit_credentials.ini", user_agent: str = "ereddicator") -> None:
         """
         Initialise the RedditAuth instance.
 
         Args:
-            is_exe (bool): Flag to determine if running as an executable. Defaults to False.
             file_path (str): Path to the credentials file. Defaults to "reddit_credentials.ini".
             user_agent (str): User agent string for Reddit API. Defaults to "ereddicator".
         """
-        self.is_exe = is_exe
         self.file_path = file_path
         self.user_agent = user_agent
         self.client_id = None
@@ -35,68 +33,6 @@ class RedditAuth:
         self.use_oauth = False
 
     def _read_credentials(self) -> None:
-        """
-        Read credentials either from user input or from a file.
-
-        This method calls either _prompt_credentials or _read_credentials_from_file
-        based on the is_exe flag.
-        """
-        if self.is_exe:
-            self._prompt_credentials_from_gui()
-        else:
-            self._read_credentials_from_file()
-
-    def _prompt_credentials_from_gui(self) -> None:
-        """
-        Prompt the user to input Reddit API credentials using a graphical user interface.
-
-        This method creates a Tkinter window with input fields for the client ID, client secret,
-        username, password, and 2FA code (optional). It uses the CredentialsInputGUI class
-        to manage the input process.
-        """
-        root = tk.Tk()
-        gui = CredentialsInputGUI(root)
-        credentials = gui.get_credentials()
-
-        try:
-            root.destroy()
-        except tk.TclError:
-            # Window was already destroyed (user closed it) which is fine.
-            pass
-
-        if not credentials:
-            raise Exception("No credentials provided. Authentication cancelled by user.")
-
-        self.client_id = credentials["client id"]
-        self.client_secret = credentials["client secret"]
-
-        if credentials.get("oauth_mode", False):
-            self.use_oauth = True
-            try:
-                print("Starting OAuth authorisation flow...")
-                oauth = RedditOAuth(
-                    client_id=self.client_id,
-                    client_secret=self.client_secret,
-                    user_agent=self.user_agent
-                )
-
-                self.username, self.refresh_token = oauth.perform_oauth_flow()
-                print(f"Successfully authenticated as {self.username} using OAuth.")
-            except Exception as e:
-                error_str = str(e).lower()
-                if "401" in error_str or "unauthorized" in error_str:
-                    error_msg = "OAuth: Invalid client ID or client secret. Please double-check your Reddit API credentials."
-                elif "timeout" in error_str or "did not receive" in error_str:
-                    error_msg = "OAuth: Timeout waiting for authorisation. Please try again and complete the authorisation in your browser within 5 minutes."
-                else:
-                    error_msg = f"OAuth: {e}"
-                raise Exception(error_msg)
-        else:
-            self.username = credentials["username"]
-            self.password = credentials["password"]
-            self.two_factor_code = credentials.get("two factor code", "None")
-
-    def _read_credentials_from_file(self) -> None:
         """
         Read Reddit API credentials from a file.
 

@@ -17,12 +17,11 @@ class UserPreferences:
        - Only edit without deletion
     4. Preserve gilded content.
     5. Preserve mod distinguished content.
-    6. Optionally advertise Ereddicator when editing content.
-    7. Specify subreddits to include or exclude from processing using whitelist and blacklist options.
-    8. Set a date range for content processing.
-    9. Enable a dry run mode for testing without making actual changes.
-    10. Specify custom text for replacing content.
-    11. Process content from Reddit data export files.
+    6. Specify subreddits to include or exclude from processing using whitelist and blacklist options.
+    7. Set a date range for content processing.
+    8. Enable a dry run mode for testing without making actual changes.
+    9. Specify custom text for replacing content.
+    10. Process content from Reddit data export files.
 
     Attributes:
         delete_comments (bool): Flag to delete comments after editing.
@@ -37,7 +36,6 @@ class UserPreferences:
         only_edit_posts (bool): Flag to only edit posts without deleting.
         preserve_gilded (bool): Flag to preserve gilded content.
         preserve_distinguished (bool): Flag to preserve mod distinguished content.
-        advertise_ereddicator (bool): Flag to occasionally advertise Ereddicator when editing text.
         dry_run (bool): Flag to enable dry run mode. When True, no actual changes will be made to Reddit content.
         comment_karma_threshold (Optional[int]): Karma threshold for comments. Comments with karma
             greater than or equal to this value will be kept. If None, all selected comments will be processed.
@@ -56,15 +54,14 @@ class UserPreferences:
     delete_posts: bool = False
     delete_without_edit_comments: bool = False
     delete_without_edit_posts: bool = False
-    delete_saved: bool = True
-    delete_upvotes: bool = True
-    delete_downvotes: bool = True
-    delete_hidden: bool = True
-    only_edit_comments: bool = True
-    only_edit_posts: bool = True
+    delete_saved: bool = False
+    delete_upvotes: bool = False
+    delete_downvotes: bool = False
+    delete_hidden: bool = False
+    only_edit_comments: bool = False
+    only_edit_posts: bool = False
     preserve_gilded: bool = False
     preserve_distinguished: bool = False
-    advertise_ereddicator: bool = False
     dry_run: bool = False
     comment_karma_threshold: Optional[int] = None
     post_karma_threshold: Optional[int] = None

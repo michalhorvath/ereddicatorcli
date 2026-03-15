@@ -39,15 +39,7 @@ class RedditContentRemover:
         self.processed_ids = self.load_processed_ids()
         self.interrupt_flag = False
         self.rate_limiter = SharedRateLimiter(default_delay=0.0)
-        self.ad_messages = [
-            "Original content erased using Ereddicator.",
-            "This content has been removed with Ereddicator.",
-            "Content deleted with Ereddicator.",
-            "This text was edited using Ereddicator.",
-            "Ereddicator was used to remove this content.",
-            "Content cleared with Ereddicator.",
-            "This text was replaced using Ereddicator."
-        ]
+
 
     @staticmethod
     def parse_ratelimit_time(error_message: str) -> Optional[float]:
@@ -141,14 +133,12 @@ class RedditContentRemover:
         """
         Determines the text to replace the original content.
 
-        This method decides whether to use advertising text, custom text, or random text based
-        on user preferences. If advertising is enabled, it has a 50% chance of being used.
+        This method decides whether to use custom text or random text based
+        on user preferences.
 
         Returns:
             str: The text to use for replacement.
         """
-        if self.preferences.advertise_ereddicator and random.random() <= 0.5:
-            return random.choice(self.ad_messages)
         if self.preferences.custom_replacement_text:
             return self.preferences.custom_replacement_text
         return self.generate_random_text()
@@ -279,7 +269,6 @@ class RedditContentRemover:
                     self.rate_limiter.wait_if_needed()
                     text_type = (
                         "custom" if replacement_text == self.preferences.custom_replacement_text
-                        else "advertising" if replacement_text in self.ad_messages
                         else "random"
                     )
                     print(
