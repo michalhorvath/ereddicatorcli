@@ -1,9 +1,10 @@
 import os
 import sys
-import configparser
 import praw
+from typing import Optional
 from prawcore.exceptions import OAuthException, ResponseException
 from modules.oauth_handler import RedditOAuth
+from modules import credentials_manager
 
 
 class RedditAuth:
@@ -14,15 +15,16 @@ class RedditAuth:
     and creates an authenticated Reddit instance.
     """
 
-    def __init__(self, file_path: str = "reddit_credentials.ini", user_agent: str = "ereddicator") -> None:
+    def __init__(self, profile_name: Optional[str] = None, user_agent: str = "ereddicatorcli") -> None:
         """
         Initialise the RedditAuth instance.
 
         Args:
-            file_path (str): Path to the credentials file. Defaults to "reddit_credentials.ini".
-            user_agent (str): User agent string for Reddit API. Defaults to "ereddicator".
+            profile_name (Optional[str]): Name of the stored credential profile to use.
+                Defaults to None, which resolves to the default profile at read time.
+            user_agent (str): User agent string for Reddit API. Defaults to "ereddicatorcli".
         """
-        self.file_path = file_path
+        self.profile_name = profile_name
         self.user_agent = user_agent
         self.client_id = None
         self.client_secret = None
@@ -34,36 +36,35 @@ class RedditAuth:
 
     def _read_credentials(self) -> None:
         """
-        Read Reddit API credentials from a file.
+        Read Reddit API credentials from the stored credential profile.
 
         This method is called when Ereddicator is running as a Python script. It
-        reads the credentials from the file specified by self.file_path.
+        reads the credentials from the profile named by self.profile_name, resolving
+        it to the default profile (and updating self.profile_name in place) if none
+        was specified.
 
         Raises:
-            FileNotFoundError: If the credentials file is not found.
+            credentials_manager.CredentialsError: If no usable profile is found.
         """
-        if not os.path.exists(self.file_path):
-            raise FileNotFoundError(f"Credentials file not found: {self.file_path}")
+        profile = credentials_manager.load_profile(self.profile_name)
+        if self.profile_name is None:
+            self.profile_name = credentials_manager.get_default_profile()
 
-        config = configparser.ConfigParser(interpolation=None)
-        with open(self.file_path, "r", encoding="utf-8") as file:
-            config.read_file(file)
-
-        self.client_id = config["reddit"]["client_id"].strip()
-        self.client_secret = config["reddit"]["client_secret"].strip()
+        self.client_id = profile["client_id"].strip()
+        self.client_secret = profile["client_secret"].strip()
 
         # Check if we have a refresh token or plan to use OAuth
-        if "refresh_token" in config["reddit"]:
-            self.refresh_token = config["reddit"]["refresh_token"]
+        if "refresh_token" in profile:
+            self.refresh_token = profile["refresh_token"]
             self.use_oauth = True
             # Username might be stored if we've authenticated before
-            if "username" in config["reddit"]:
-                self.username = config["reddit"]["username"]
+            if "username" in profile:
+                self.username = profile["username"]
                 print(f"Using stored refresh token for {self.username}")
             else:
                 print("Refresh token found, will fetch username during authentication")
         # Check for OAuth mode without refresh token (first-time setup)
-        elif "username" not in config["reddit"] and "password" not in config["reddit"]:
+        elif "username" not in profile and "password" not in profile:
             print("OAuth mode detected (no username/password provided)")
             self.use_oauth = True
             try:
@@ -76,13 +77,14 @@ class RedditAuth:
                 self.username, self.refresh_token = oauth.perform_oauth_flow()
 
                 # Save the refresh token for future use
-                config["reddit"]["username"] = self.username
-                config["reddit"]["refresh_token"] = self.refresh_token
-                with open(self.file_path, "w") as f:
-                    config.write(f)
+                credentials_manager.update_profile_fields(
+                    self.profile_name,
+                    username=self.username,
+                    refresh_token=self.refresh_token,
+                )
 
                 print(f"Successfully authenticated as {self.username}")
-                print(f"Refresh token saved to {self.file_path}")
+                print(f"Refresh token saved to profile '{self.profile_name}'")
             except Exception as e:
                 error_str = str(e).lower()
                 if "401" in error_str or "unauthorized" in error_str:
@@ -94,12 +96,9 @@ class RedditAuth:
                 raise Exception(error_msg)
         else:
             # Traditional username/password authentication
-            self.username = config["reddit"]["username"].strip()
-            self.password = config["reddit"]["password"].strip()
-            if "two_factor_code" in config["reddit"]:
-                self.two_factor_code = config["reddit"]["two_factor_code"].strip()
-            else:
-                self.two_factor_code = "None"
+            self.username = profile["username"].strip()
+            self.password = profile["password"].strip()
+            self.two_factor_code = profile.get("two_factor_code", "None").strip()
 
     def get_reddit_instance(self) -> praw.Reddit:
         """
@@ -113,7 +112,7 @@ class RedditAuth:
             praw.Reddit: An authenticated Reddit instance.
 
         Raises:
-            FileNotFoundError: If the credentials file is not found.
+            credentials_manager.CredentialsError: If no usable credential profile is found.
             OAuthException: If authentication fails due to OAuth issues.
             ResponseException: If there's an issue with the Reddit API response.
         """
@@ -158,24 +157,9 @@ class RedditAuth:
 
             return reddit
 
-        except FileNotFoundError:
-            error_msg = f"Please create a file named '{self.file_path}' in the same directory " \
-                        "as main.py in one of the following formats:\n\n" \
-                        "For traditional Reddit accounts:\n" \
-                        "[reddit]\n" \
-                        "client_id = YOUR_CLIENT_ID\n" \
-                        "client_secret = YOUR_CLIENT_SECRET\n" \
-                        "username = YOUR_USERNAME\n" \
-                        "password = YOUR_PASSWORD\n" \
-                        "# Leave as None if you don't use two-factor authentication\n" \
-                        "two_factor_code = None\n\n" \
-                        "For Reddit accounts that use Google login (or other OAuth methods):\n" \
-                        "[reddit]\n" \
-                        "client_id = YOUR_CLIENT_ID\n" \
-                        "client_secret = YOUR_CLIENT_SECRET\n" \
-                        "# The refresh_token will be filled in automatically after your first login"
-            print(error_msg)
-            raise FileNotFoundError(error_msg)
+        except credentials_manager.CredentialsError as e:
+            error_msg = f"{e}\nRun 'python main.py --help' for credential management options."
+            raise credentials_manager.CredentialsError(error_msg) from e
         except (OAuthException, ResponseException) as e:
             error_str = str(e).lower()
             if "only script apps may use password auth" in error_str or "unauthorized_client" in error_str:

@@ -133,7 +133,7 @@ class RedditOAuth:
     Handles the OAuth flow for Reddit authentication.
     """
     def __init__(self, client_id: str, client_secret: str, redirect_uri: str = "http://localhost:8080",
-                 user_agent: str = "ereddicator"):
+                 user_agent: str = "ereddicatorcli"):
         """
         Initialise the Reddit OAuth handler.
 
@@ -141,21 +141,21 @@ class RedditOAuth:
             client_id (str): Reddit API client ID.
             client_secret (str): Reddit API client secret.
             redirect_uri (str, optional): Redirect URI for OAuth flow. Defaults to "http://localhost:8080".
-            user_agent (str, optional): User agent for API requests. Defaults to "ereddicator".
+            user_agent (str, optional): User agent for API requests. Defaults to "ereddicatorcli".
         """
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
         self.user_agent = user_agent
 
-    def get_auth_url(self, scopes: list = None, state: str = "ereddicator", duration: str = "permanent") -> str:
+    def get_auth_url(self, scopes: list = None, state: str = "ereddicatorcli", duration: str = "permanent") -> str:
         """
         Generate the authorisation URL.
 
         Args:
             scopes (list, optional): List of requested permissions. Defaults to ["identity", "edit", "history",
                                     "read", "vote", "save"].
-            state (str, optional): State parameter for OAuth. Defaults to "ereddicator".
+            state (str, optional): State parameter for OAuth. Defaults to "ereddicatorcli".
             duration (str, optional): Token duration. Defaults to "permanent".
 
         Returns:

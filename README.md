@@ -40,7 +40,8 @@ This Python CLI app allows you to edit and/or delete all your Reddit comments, p
 - **Date Range Filtering**: Set a specific date range to process content from, allowing you to target content from a particular time period.
 - **Dry Run Mode**: Simulate the removal process without actually making any changes. In this mode, Ereddicator will print out what actions would be taken (e.g. what comments and posts will be deleted) without modifying any of your Reddit content.
 - **Custom Replacement Text**: Specify custom text to replace your content during editing or before deletion. If not provided, random text will be used.
-- **Persistent Processing**: Tracks which items have already been processed across multiple runs, ensuring that items are not processed again if the script is restarted or interrupted.
+- **Persistent Processing**: Tracks which items have already been processed across multiple runs, ensuring that items are not processed again if the script is restarted or interrupted. This progress file is stored in your OS's application data directory (see [Instructions](#instructions-for-python-users)), so it works no matter which directory you launch the script from.
+- **Multiple Credential Profiles**: Store credentials for more than one Reddit account and pick which one to use per run with `-c`/`--credentials`. See [Command Line Arguments](#command-line-arguments).
 - **Advertise Option**: When enabled, there's a 50% chance for each comment or post to be replaced with a simple message mentioning Ereddicator instead of random text or custom text.
 
 ## Command Line Arguments
@@ -48,11 +49,10 @@ This Python CLI app allows you to edit and/or delete all your Reddit comments, p
 You can run the script with the following arguments to set or override preferences:
 
 ```text
-usage: main.py [-h]
-               [--delete | --delete_only | --edit_only]
-               [--dry_run]
-               [--whitelist WHITELIST [WHITELIST ...]
-               | --blacklist BLACKLIST [BLACKLIST ...]]
+usage: main.py [-h] [--delete | --delete_only | --edit_only] [--dry_run]
+               [--whitelist WHITELIST [WHITELIST ...] | --blacklist BLACKLIST
+               [BLACKLIST ...]] [-c NAME]
+               [--new-credentials | --remove-credentials NAME | --list-credentials]
 
 EreddicatorCLI
 
@@ -66,7 +66,32 @@ options:
                         List of subreddits to preserve (not process)
   --blacklist BLACKLIST [BLACKLIST ...]
                         List of subreddits to exclusively process
+
+credential management:
+  -c NAME, --credentials NAME
+                        Name of the stored credential profile to use for this
+                        run (defaults to the profile marked as default)
+  --new-credentials     Interactively create (or overwrite) a stored
+                        credential profile, then exit
+  --remove-credentials NAME
+                        Delete a stored credential profile (with
+                        confirmation), then exit
+  --list-credentials    List stored credential profile names and the current
+                        default, then exit
 ```
+
+### Managing credential profiles
+
+Ereddicator can store credentials for multiple Reddit accounts as named profiles:
+
+- `python main.py --new-credentials` — interactively create (or overwrite) a profile: pick a name, choose traditional username/password or OAuth (Google login) auth, enter the details, and optionally mark it as the default profile.
+- `python main.py --list-credentials` — list stored profile names and show which one is the default.
+- `python main.py --remove-credentials NAME` — delete a stored profile (asks for confirmation first).
+- `python main.py -c NAME ...` (or `--credentials NAME`) — use a specific profile for that run instead of the default one.
+
+If you don't pass `-c`, the profile marked as default is used. The first profile you ever create is automatically made the default.
+
+Profiles are stored in a single `credentials.json` file in your OS's standard config directory (e.g. `~/.config/ereddicatorcli/credentials.json` on Linux, `~/Library/Application Support/ereddicatorcli/credentials.json` on macOS, `%APPDATA%\ereddicatorcli\credentials.json` on Windows), so the file location no longer depends on which directory you run the script from.
 
 ## Reddit Data Export Request
 Reddit's API is limited and sometimes does not retrieve all comments and posts. If you want to ensure you get everything, you will need to make a Reddit data export request:
@@ -114,27 +139,8 @@ Reddit will process your request and send a message to your Reddit inbox (it is 
 
    ![Finding Client ID and Secret](images/client-id-and-secret.png)
 
-3. Create a file named `reddit_credentials.ini` in the same directory as the script.
-4. Add your Reddit API credentials to the file in one of the following formats:
-
-   **For traditional Reddit accounts:**
-   ```
-   [reddit]
-   client_id = YOUR_CLIENT_ID
-   client_secret = YOUR_CLIENT_SECRET
-   username = YOUR_USERNAME
-   password = YOUR_PASSWORD
-   # Leave as None if you don't use two-factor authentication
-   two_factor_code = None
-   ```
-   **For Reddit accounts that use Google login:**
-   ```
-   [reddit]
-   client_id = YOUR_CLIENT_ID
-   client_secret = YOUR_CLIENT_SECRET
-   # The refresh_token will be filled in after your first login
-   ```
-5. Navigate to the `src` directory.
-6. Run the script using Python: `python main.py` or provide arguments like `python main.py --delete --blacklist aww me_irl`. (See [Command Line Arguments](#command-line-arguments) for options).
-7. Keep the terminal where you ran the Python command visible throughout the entire process. This terminal displays authentication status, error messages, and progress updates.
-8. If you're using Google login, you'll be prompted to authorise via a browser. After successful authorisation, the refresh token will be saved for future use.
+3. Navigate to the `src` directory.
+4. Run `python main.py --new-credentials` and follow the prompts to save your `client_id`/`client_secret` (and, for traditional accounts, your username/password) as a named credential profile. See [Managing credential profiles](#managing-credential-profiles) for details, including how to store more than one account and pick a default.
+5. Run the script using Python: `python main.py` or provide arguments like `python main.py --delete --blacklist aww me_irl`. (See [Command Line Arguments](#command-line-arguments) for options). Use `-c NAME` if you want to use a non-default credential profile for this run.
+6. Keep the terminal where you ran the Python command visible throughout the entire process. This terminal displays authentication status, error messages, and progress updates.
+7. If you're using Google login, you'll be prompted to authorise via a browser the first time you use that profile. After successful authorisation, the refresh token will be saved for future use.

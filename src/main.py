@@ -8,6 +8,7 @@ import praw
 from modules.reddit_auth import RedditAuth
 from modules.reddit_content_remover import RedditContentRemover
 from modules.user_preferences import UserPreferences
+from modules import credentials_manager
 
 
 def run_content_remover(preferences: UserPreferences, reddit: praw.Reddit, auth: RedditAuth) -> None:
@@ -104,8 +105,63 @@ def main():
     list_group = parser.add_mutually_exclusive_group()
     list_group.add_argument("--whitelist", nargs="+", help="List of subreddits to preserve (not process)")
     list_group.add_argument("--blacklist", nargs="+", help="List of subreddits to exclusively process")
-    
+
+    credentials_group = parser.add_argument_group("credential management")
+    credentials_group.add_argument(
+        "-c", "--credentials", metavar="NAME",
+        help="Name of the stored credential profile to use for this run (defaults to the profile marked as default)"
+    )
+
+    mgmt_group = credentials_group.add_mutually_exclusive_group()
+    mgmt_group.add_argument(
+        "--new-credentials", action="store_true",
+        help="Interactively create (or overwrite) a stored credential profile, then exit"
+    )
+    mgmt_group.add_argument(
+        "--remove-credentials", metavar="NAME",
+        help="Delete a stored credential profile (with confirmation), then exit"
+    )
+    mgmt_group.add_argument(
+        "--list-credentials", action="store_true",
+        help="List stored credential profile names and the current default, then exit"
+    )
+
     args = parser.parse_args()
+
+    if args.new_credentials:
+        try:
+            credentials_manager.run_new_credentials_wizard()
+        except (KeyboardInterrupt, EOFError):
+            print("\nCancelled.")
+        return
+
+    if args.remove_credentials:
+        name = args.remove_credentials
+        if not credentials_manager.profile_exists(name):
+            print(f"No stored credential profile named '{name}'.")
+            return
+        confirm = input(f"Remove credential profile '{name}'? This cannot be undone. [y/N]: ").strip().lower()
+        if confirm != "y":
+            print("Cancelled.")
+            return
+        was_default = credentials_manager.get_default_profile() == name
+        credentials_manager.remove_profile(name)
+        print(f"Removed profile '{name}'.")
+        if was_default:
+            print("That was your default profile. No default is set now — "
+                  "run --new-credentials or pass -c/--credentials NAME explicitly next time.")
+        return
+
+    if args.list_credentials:
+        profiles = credentials_manager.list_profiles()
+        default = credentials_manager.get_default_profile()
+        if not profiles:
+            print("No stored credential profiles. Run 'python main.py --new-credentials' to create one.")
+        else:
+            print("Stored credential profiles:")
+            for p in profiles:
+                print(f"  {p}" + ("  (default)" if p == default else ""))
+        return
 
     # Keep trying authentication until successful or user gives up.
     reddit = None
@@ -113,17 +169,16 @@ def main():
     while reddit is None:
         try:
             # Create an instance of RedditAuth and get the Reddit instance
-            auth = RedditAuth()
+            auth = RedditAuth(profile_name=args.credentials)
             reddit = auth.get_reddit_instance()
         except Exception as e:
             error_message = str(e)
 
             if "cancelled by user" in error_message.lower() or "application has been destroyed" in error_message.lower():
-                print(f"\n{e}")
+                print(e)
                 return
 
-            print(f"\n{e}")
-            print("Please check your reddit_credentials.ini file and run the program again.")
+            print(e)
             return
     
     # Load user preferences
