@@ -109,21 +109,25 @@ def main():
     credentials_group = parser.add_argument_group("credential management")
     credentials_group.add_argument(
         "-c", "--credentials", metavar="NAME",
-        help="Name of the stored credential profile to use for this run (defaults to the profile marked as default)"
+        help="Name of the stored credentials to use for this run (defaults to the credentials marked as default)"
     )
 
     mgmt_group = credentials_group.add_mutually_exclusive_group()
     mgmt_group.add_argument(
         "--new-credentials", action="store_true",
-        help="Interactively create (or overwrite) a stored credential profile, then exit"
+        help="Interactively create (or overwrite) stored credentials, then exit"
     )
     mgmt_group.add_argument(
         "--remove-credentials", metavar="NAME",
-        help="Delete a stored credential profile (with confirmation), then exit"
+        help="Delete stored credentials (with confirmation), then exit"
     )
     mgmt_group.add_argument(
         "--list-credentials", action="store_true",
-        help="List stored credential profile names and the current default, then exit"
+        help="List stored credential names and the current default, then exit"
+    )
+    mgmt_group.add_argument(
+        "--set-default-credentials", metavar="NAME",
+        help="Set existing stored credentials as the default used when -c/--credentials is omitted, then exit"
     )
 
     args = parser.parse_args()
@@ -137,30 +141,40 @@ def main():
 
     if args.remove_credentials:
         name = args.remove_credentials
-        if not credentials_manager.profile_exists(name):
-            print(f"No stored credential profile named '{name}'.")
+        if not credentials_manager.credentials_exist(name):
+            print(f"No stored credentials named '{name}'.")
             return
-        confirm = input(f"Remove credential profile '{name}'? This cannot be undone. [y/N]: ").strip().lower()
+        confirm = input(f"Remove credentials '{name}'? This cannot be undone. [y/N]: ").strip().lower()
         if confirm != "y":
             print("Cancelled.")
             return
-        was_default = credentials_manager.get_default_profile() == name
-        credentials_manager.remove_profile(name)
-        print(f"Removed profile '{name}'.")
+        was_default = credentials_manager.get_default_credentials() == name
+        credentials_manager.remove_credentials(name)
+        print(f"Removed credentials '{name}'.")
         if was_default:
-            print("That was your default profile. No default is set now — "
+            print("Those were your default credentials. No default is set now — "
                   "run --new-credentials or pass -c/--credentials NAME explicitly next time.")
         return
 
+    if args.set_default_credentials:
+        name = args.set_default_credentials
+        try:
+            credentials_manager.set_default_credentials(name)
+        except credentials_manager.CredentialsNotFoundError as e:
+            print(e)
+            return
+        print(f"Default credentials set to '{name}'.")
+        return
+
     if args.list_credentials:
-        profiles = credentials_manager.list_profiles()
-        default = credentials_manager.get_default_profile()
-        if not profiles:
-            print("No stored credential profiles. Run 'python main.py --new-credentials' to create one.")
+        names = credentials_manager.list_credentials()
+        default = credentials_manager.get_default_credentials()
+        if not names:
+            print("No stored credentials. Run 'python main.py --new-credentials' to create some.")
         else:
-            print("Stored credential profiles:")
-            for p in profiles:
-                print(f"  {p}" + ("  (default)" if p == default else ""))
+            print("Stored credentials:")
+            for n in names:
+                print(f"  {n}" + ("  (default)" if n == default else ""))
         return
 
     # Keep trying authentication until successful or user gives up.
@@ -169,7 +183,7 @@ def main():
     while reddit is None:
         try:
             # Create an instance of RedditAuth and get the Reddit instance
-            auth = RedditAuth(profile_name=args.credentials)
+            auth = RedditAuth(credentials_name=args.credentials)
             reddit = auth.get_reddit_instance()
         except Exception as e:
             error_message = str(e)

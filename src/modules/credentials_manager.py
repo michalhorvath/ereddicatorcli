@@ -17,12 +17,12 @@ class CredentialsError(Exception):
     """Base class for all credential-store errors."""
 
 
-class ProfileNotFoundError(CredentialsError):
-    """A named profile does not exist in the store."""
+class CredentialsNotFoundError(CredentialsError):
+    """No stored credentials exist under the given name."""
 
 
-class NoDefaultProfileError(CredentialsError):
-    """No profile name was given and no default is set."""
+class NoDefaultCredentialsError(CredentialsError):
+    """No name was given and no default credentials are set."""
 
 
 def get_config_dir() -> Path:
@@ -64,61 +64,61 @@ def save_store(store: Dict[str, dict]) -> None:
     os.replace(tmp_path, path)
 
 
-def list_profiles() -> List[str]:
+def list_credentials() -> List[str]:
     return [name for name in load_store() if name != DEFAULT_KEY]
 
 
-def profile_exists(name: str) -> bool:
+def credentials_exist(name: str) -> bool:
     return name in load_store()
 
 
-def get_default_profile() -> Optional[str]:
+def get_default_credentials() -> Optional[str]:
     return load_store().get(DEFAULT_KEY)
 
 
-def set_default_profile(name: str) -> None:
+def set_default_credentials(name: str) -> None:
     store = load_store()
     if name not in store:
-        raise ProfileNotFoundError(f"No stored credential profile named '{name}'.")
+        raise CredentialsNotFoundError(f"No stored credentials named '{name}'.")
     store[DEFAULT_KEY] = name
     save_store(store)
 
 
-def load_profile(name: Optional[str] = None) -> Dict[str, str]:
+def load_credentials(name: Optional[str] = None) -> Dict[str, str]:
     store = load_store()
     resolved_name = name
     if resolved_name is None:
         resolved_name = store.get(DEFAULT_KEY)
         if resolved_name is None:
-            raise NoDefaultProfileError(
-                "No credential profile was specified and no default profile is set."
+            raise NoDefaultCredentialsError(
+                "No credentials name was specified and no default credentials are set."
             )
     if resolved_name not in store or resolved_name == DEFAULT_KEY:
-        raise ProfileNotFoundError(f"No stored credential profile named '{resolved_name}'.")
+        raise CredentialsNotFoundError(f"No stored credentials named '{resolved_name}'.")
     return dict(store[resolved_name])
 
 
-def save_profile(name: str, data: Dict[str, str], make_default: bool = False) -> None:
+def save_credentials(name: str, data: Dict[str, str], make_default: bool = False) -> None:
     store = load_store()
-    had_no_profiles = len([k for k in store if k != DEFAULT_KEY]) == 0
+    had_none_stored = len([k for k in store if k != DEFAULT_KEY]) == 0
     store[name] = data
-    if make_default or had_no_profiles:
+    if make_default or had_none_stored:
         store[DEFAULT_KEY] = name
     save_store(store)
 
 
-def update_profile_fields(name: str, **fields) -> None:
+def update_credentials_fields(name: str, **fields) -> None:
     store = load_store()
     if name not in store or name == DEFAULT_KEY:
-        raise ProfileNotFoundError(f"No stored credential profile named '{name}'.")
+        raise CredentialsNotFoundError(f"No stored credentials named '{name}'.")
     store[name].update(fields)
     save_store(store)
 
 
-def remove_profile(name: str) -> None:
+def remove_credentials(name: str) -> None:
     store = load_store()
     if name not in store or name == DEFAULT_KEY:
-        raise ProfileNotFoundError(f"No stored credential profile named '{name}'.")
+        raise CredentialsNotFoundError(f"No stored credentials named '{name}'.")
     del store[name]
     if store.get(DEFAULT_KEY) == name:
         del store[DEFAULT_KEY]
@@ -134,7 +134,7 @@ def _prompt_nonempty(prompt: str) -> str:
 
 
 def run_new_credentials_wizard() -> str:
-    print(f"Credential profiles are stored in: {get_credentials_path()}\n")
+    print(f"Credentials are stored in: {get_credentials_path()}\n")
 
     print("Auth method:")
     print("  1) Traditional username/password")
@@ -162,8 +162,8 @@ def run_new_credentials_wizard() -> str:
 
         print(
             "\nNo username/password needed for OAuth. A browser window will open to "
-            "authorise this app. The profile will be named after the Reddit username "
-            "you authorise with."
+            "authorise this app. The stored credentials will be named after the Reddit "
+            "username you authorise with."
         )
         try:
             oauth = RedditOAuth(client_id=client_id, client_secret=client_secret)
@@ -185,21 +185,21 @@ def run_new_credentials_wizard() -> str:
         data["refresh_token"] = refresh_token
         print(f"Successfully authorised as {name}")
 
-    if profile_exists(name):
-        confirm = input(f"Profile '{name}' already exists. Overwrite it? [y/N]: ").strip().lower()
+    if credentials_exist(name):
+        confirm = input(f"Credentials named '{name}' already exist. Overwrite them? [y/N]: ").strip().lower()
         if confirm != "y":
             raise KeyboardInterrupt("Cancelled by user.")
 
-    if list_profiles():
-        answer = input("Set this as the default profile? [y/N]: ").strip().lower()
-        make_default = answer == "y"
+    if get_default_credentials() is None:
+        answer = input("No default credentials are set. Set these as the default? [Y/n]: ").strip().lower()
+        make_default = answer != "n"
     else:
-        make_default = True
+        make_default = False
 
-    save_profile(name, data, make_default=make_default)
+    save_credentials(name, data, make_default=make_default)
 
-    is_default = get_default_profile() == name
-    print(f"\nSaved profile '{name}' to {get_credentials_path()}")
-    print(f"Default profile: {'yes' if is_default else 'no'}")
+    is_default = get_default_credentials() == name
+    print(f"\nSaved credentials '{name}' to {get_credentials_path()}")
+    print(f"Default: {'yes' if is_default else 'no'}")
 
     return name

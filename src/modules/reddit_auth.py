@@ -15,16 +15,16 @@ class RedditAuth:
     and creates an authenticated Reddit instance.
     """
 
-    def __init__(self, profile_name: Optional[str] = None, user_agent: str = "ereddicatorcli") -> None:
+    def __init__(self, credentials_name: Optional[str] = None, user_agent: str = "ereddicatorcli") -> None:
         """
         Initialise the RedditAuth instance.
 
         Args:
-            profile_name (Optional[str]): Name of the stored credential profile to use.
-                Defaults to None, which resolves to the default profile at read time.
+            credentials_name (Optional[str]): Name of the stored credentials to use.
+                Defaults to None, which resolves to the default credentials at read time.
             user_agent (str): User agent string for Reddit API. Defaults to "ereddicatorcli".
         """
-        self.profile_name = profile_name
+        self.credentials_name = credentials_name
         self.user_agent = user_agent
         self.client_id = None
         self.client_secret = None
@@ -36,35 +36,35 @@ class RedditAuth:
 
     def _read_credentials(self) -> None:
         """
-        Read Reddit API credentials from the stored credential profile.
+        Read Reddit API credentials from the stored credentials.
 
         This method is called when Ereddicator is running as a Python script. It
-        reads the credentials from the profile named by self.profile_name, resolving
-        it to the default profile (and updating self.profile_name in place) if none
+        reads the credentials named by self.credentials_name, resolving it to the
+        default credentials (and updating self.credentials_name in place) if none
         was specified.
 
         Raises:
-            credentials_manager.CredentialsError: If no usable profile is found.
+            credentials_manager.CredentialsError: If no usable credentials are found.
         """
-        profile = credentials_manager.load_profile(self.profile_name)
-        if self.profile_name is None:
-            self.profile_name = credentials_manager.get_default_profile()
+        creds = credentials_manager.load_credentials(self.credentials_name)
+        if self.credentials_name is None:
+            self.credentials_name = credentials_manager.get_default_credentials()
 
-        self.client_id = profile["client_id"].strip()
-        self.client_secret = profile["client_secret"].strip()
+        self.client_id = creds["client_id"].strip()
+        self.client_secret = creds["client_secret"].strip()
 
         # Check if we have a refresh token or plan to use OAuth
-        if "refresh_token" in profile:
-            self.refresh_token = profile["refresh_token"]
+        if "refresh_token" in creds:
+            self.refresh_token = creds["refresh_token"]
             self.use_oauth = True
             # Username might be stored if we've authenticated before
-            if "username" in profile:
-                self.username = profile["username"]
+            if "username" in creds:
+                self.username = creds["username"]
                 print(f"Using stored refresh token for {self.username}")
             else:
                 print("Refresh token found, will fetch username during authentication")
         # Check for OAuth mode without refresh token (first-time setup)
-        elif "username" not in profile and "password" not in profile:
+        elif "username" not in creds and "password" not in creds:
             print("OAuth mode detected (no username/password provided)")
             self.use_oauth = True
             try:
@@ -77,14 +77,14 @@ class RedditAuth:
                 self.username, self.refresh_token = oauth.perform_oauth_flow()
 
                 # Save the refresh token for future use
-                credentials_manager.update_profile_fields(
-                    self.profile_name,
+                credentials_manager.update_credentials_fields(
+                    self.credentials_name,
                     username=self.username,
                     refresh_token=self.refresh_token,
                 )
 
                 print(f"Successfully authenticated as {self.username}")
-                print(f"Refresh token saved to profile '{self.profile_name}'")
+                print(f"Refresh token saved to credentials '{self.credentials_name}'")
             except Exception as e:
                 error_str = str(e).lower()
                 if "401" in error_str or "unauthorized" in error_str:
@@ -96,9 +96,9 @@ class RedditAuth:
                 raise Exception(error_msg)
         else:
             # Traditional username/password authentication
-            self.username = profile["username"].strip()
-            self.password = profile["password"].strip()
-            self.two_factor_code = profile.get("two_factor_code", "None").strip()
+            self.username = creds["username"].strip()
+            self.password = creds["password"].strip()
+            self.two_factor_code = creds.get("two_factor_code", "None").strip()
 
     def get_reddit_instance(self) -> praw.Reddit:
         """
@@ -112,14 +112,14 @@ class RedditAuth:
             praw.Reddit: An authenticated Reddit instance.
 
         Raises:
-            credentials_manager.CredentialsError: If no usable credential profile is found.
+            credentials_manager.CredentialsError: If no usable credentials are found.
             OAuthException: If authentication fails due to OAuth issues.
             ResponseException: If there's an issue with the Reddit API response.
         """
         try:
             if not (self.client_id and self.client_secret and (self.username or self.refresh_token)):
                 self._read_credentials()
-            
+
             print("Retrieving Reddit Authentication instance...")
 
             if self.use_oauth and self.refresh_token:
