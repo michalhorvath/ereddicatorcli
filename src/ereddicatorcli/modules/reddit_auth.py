@@ -3,8 +3,8 @@ import sys
 import praw
 from typing import Optional
 from prawcore.exceptions import OAuthException, ResponseException
-from modules.oauth_handler import RedditOAuth
-from modules import credentials_manager
+from .oauth_handler import RedditOAuth
+from . import credentials_manager
 
 
 class RedditAuth:

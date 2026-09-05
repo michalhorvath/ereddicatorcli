@@ -2,5 +2,6 @@ __pycache__
 src/reddit_credentials.ini
 build/
 dist/
+*.egg-info/
 ereddicator.spec
 ereddicator_*_processed_ids.txt

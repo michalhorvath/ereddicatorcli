@@ -5,10 +5,10 @@ import sys
 import threading
 import time
 import praw
-from modules.reddit_auth import RedditAuth
-from modules.reddit_content_remover import RedditContentRemover
-from modules.user_preferences import UserPreferences
-from modules import credentials_manager
+from .modules.reddit_auth import RedditAuth
+from .modules.reddit_content_remover import RedditContentRemover
+from .modules.user_preferences import UserPreferences
+from .modules import credentials_manager
 
 
 def run_content_remover(preferences: UserPreferences, reddit: praw.Reddit, auth: RedditAuth) -> None:
@@ -94,7 +94,7 @@ def run_content_remover(preferences: UserPreferences, reddit: praw.Reddit, auth:
 
 def main():
     # Parse arguments
-    parser = argparse.ArgumentParser(description="EreddicatorCLI")
+    parser = argparse.ArgumentParser(prog="ereddicator", description="EreddicatorCLI")
     
     action_group = parser.add_mutually_exclusive_group()
     action_group.add_argument("--delete", action="store_true", help="Delete content after editing")

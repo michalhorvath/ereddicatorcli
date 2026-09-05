@@ -9,9 +9,9 @@ from datetime import datetime
 import praw
 from prawcore import ResponseException
 from prawcore.exceptions import Forbidden, NotFound
-from modules.user_preferences import UserPreferences
-from modules.rate_limiter import SharedRateLimiter
-from modules import credentials_manager
+from .user_preferences import UserPreferences
+from .rate_limiter import SharedRateLimiter
+from . import credentials_manager
 
 
 class RedditContentRemover:

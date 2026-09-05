@@ -49,7 +49,7 @@ This Python CLI app allows you to edit and/or delete all your Reddit comments, p
 You can run the script with the following arguments to set or override preferences:
 
 ```text
-usage: main.py [-h] [--delete | --delete_only | --edit_only] [--dry_run]
+usage: ereddicator [-h] [--delete | --delete_only | --edit_only] [--dry_run]
                [--whitelist WHITELIST [WHITELIST ...] | --blacklist BLACKLIST
                [BLACKLIST ...]] [-c NAME]
                [--new-credentials | --remove-credentials NAME | --list-credentials]
@@ -84,10 +84,10 @@ credential management:
 
 Ereddicator can store credentials for multiple Reddit accounts as named profiles:
 
-- `python main.py --new-credentials` — interactively create (or overwrite) a profile: pick a name, choose traditional username/password or OAuth (Google login) auth, enter the details, and optionally mark it as the default profile.
-- `python main.py --list-credentials` — list stored profile names and show which one is the default.
-- `python main.py --remove-credentials NAME` — delete a stored profile (asks for confirmation first).
-- `python main.py -c NAME ...` (or `--credentials NAME`) — use a specific profile for that run instead of the default one.
+- `ereddicator --new-credentials` — interactively create (or overwrite) a profile: pick a name, choose traditional username/password or OAuth (Google login) auth, enter the details, and optionally mark it as the default profile.
+- `ereddicator --list-credentials` — list stored profile names and show which one is the default.
+- `ereddicator --remove-credentials NAME` — delete a stored profile (asks for confirmation first).
+- `ereddicator -c NAME ...` (or `--credentials NAME`) — use a specific profile for that run instead of the default one.
 
 If you don't pass `-c`, the profile marked as default is used. The first profile you ever create is automatically made the default.
 
@@ -112,14 +112,28 @@ Reddit will process your request and send a message to your Reddit inbox (it is 
 
 ### Installation
 
+Install directly from GitHub with pip (a virtual environment is recommended):
+
+```
+pip install git+https://github.com/michalhorvath/ereddicatorcli.git
+```
+
+This installs an `ereddicator` command on your PATH — no need to clone the repository or run `python main.py`.
+
+Alternatively, to install from a local clone (e.g. if you want to modify the code):
+
 1. Git clone this repository: `git clone https://github.com/michalhorvath/ereddicatorcli.git`
 2. Navigate to the project directory:
    ```
    cd ereddicatorcli
    ```
-3. Install the required dependencies:
+3. Install it:
    ```
-   pip install -r requirements.txt
+   pip install .
+   ```
+   or, for an editable install that picks up code changes without reinstalling:
+   ```
+   pip install -e .
    ```
 
 ### Instructions
@@ -139,8 +153,7 @@ Reddit will process your request and send a message to your Reddit inbox (it is 
 
    ![Finding Client ID and Secret](images/client-id-and-secret.png)
 
-3. Navigate to the `src` directory.
-4. Run `python main.py --new-credentials` and follow the prompts to save your `client_id`/`client_secret` (and, for traditional accounts, your username/password) as a named credential profile. See [Managing credential profiles](#managing-credential-profiles) for details, including how to store more than one account and pick a default.
-5. Run the script using Python: `python main.py` or provide arguments like `python main.py --delete --blacklist aww me_irl`. (See [Command Line Arguments](#command-line-arguments) for options). Use `-c NAME` if you want to use a non-default credential profile for this run.
-6. Keep the terminal where you ran the Python command visible throughout the entire process. This terminal displays authentication status, error messages, and progress updates.
-7. If you're using Google login, you'll be prompted to authorise via a browser the first time you use that profile. After successful authorisation, the refresh token will be saved for future use.
+3. Run `ereddicator --new-credentials` and follow the prompts to save your `client_id`/`client_secret` (and, for traditional accounts, your username/password) as a named credential profile. See [Managing credential profiles](#managing-credential-profiles) for details, including how to store more than one account and pick a default.
+4. Run `ereddicator` or provide arguments like `ereddicator --delete --blacklist aww me_irl`. (See [Command Line Arguments](#command-line-arguments) for options). Use `-c NAME` if you want to use a non-default credential profile for this run.
+5. Keep the terminal where you ran the command visible throughout the entire process. This terminal displays authentication status, error messages, and progress updates.
+6. If you're using Google login, you'll be prompted to authorise via a browser the first time you use that profile. After successful authorisation, the refresh token will be saved for future use.

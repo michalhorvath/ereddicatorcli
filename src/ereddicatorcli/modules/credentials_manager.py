@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 
 import platformdirs
 
-from modules.oauth_handler import RedditOAuth
+from .oauth_handler import RedditOAuth
 
 APP_NAME = "ereddicatorcli"
 CREDENTIALS_FILENAME = "credentials.json"
