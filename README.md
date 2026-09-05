@@ -41,7 +41,7 @@ This Python CLI app allows you to edit and/or delete all your Reddit comments, p
 - **Dry Run Mode**: Simulate the removal process without actually making any changes. In this mode, Ereddicator will print out what actions would be taken (e.g. what comments and posts will be deleted) without modifying any of your Reddit content.
 - **Custom Replacement Text**: Specify custom text to replace your content during editing or before deletion. If not provided, random text will be used.
 - **Persistent Processing**: Tracks which items have already been processed across multiple runs, ensuring that items are not processed again if the script is restarted or interrupted. This progress file is stored in your OS's application data directory (see [Instructions](#instructions-for-python-users)), so it works no matter which directory you launch the script from.
-- **Multiple Credential Profiles**: Store credentials for more than one Reddit account and pick which one to use per run with `-c`/`--credentials`. See [Command Line Arguments](#command-line-arguments).
+- **Multiple Users**: Store credentials for more than one Reddit account and pick which one to use per run with `-u`/`--user`. See [Command Line Arguments](#command-line-arguments).
 - **Advertise Option**: When enabled, there's a 50% chance for each comment or post to be replaced with a simple message mentioning Ereddicator instead of random text or custom text.
 
 ## Command Line Arguments
@@ -49,49 +49,48 @@ This Python CLI app allows you to edit and/or delete all your Reddit comments, p
 You can run the script with the following arguments to set or override preferences:
 
 ```text
-usage: ereddicator [-h] [--delete | --delete_only | --edit_only] [--dry_run]
-               [--whitelist WHITELIST [WHITELIST ...] | --blacklist BLACKLIST
-               [BLACKLIST ...]] [-c NAME]
-               [--new-credentials | --remove-credentials NAME | --list-credentials]
+usage: ereddicator [-h] [--delete | --delete-only | --edit-only] [--dry-run]
+                   [--whitelist WHITELIST [WHITELIST ...] | --blacklist BLACKLIST
+                   [BLACKLIST ...]] [-u NAME]
+                   [--new-user | --remove-user NAME | --list-users | --set-default-user NAME]
 
 EreddicatorCLI
 
 options:
   -h, --help            show this help message and exit
   --delete              Delete content after editing
-  --delete_only         Delete content without editing
-  --edit_only           Only edit content without deleting
-  --dry_run             Enable dry run mode (no actual changes made)
+  --delete-only         Delete content without editing
+  --edit-only           Only edit content without deleting
+  --dry-run             Enable dry run mode (no actual changes made)
   --whitelist WHITELIST [WHITELIST ...]
                         List of subreddits to preserve (not process)
   --blacklist BLACKLIST [BLACKLIST ...]
                         List of subreddits to exclusively process
 
-credential management:
-  -c NAME, --credentials NAME
-                        Name of the stored credential profile to use for this
-                        run (defaults to the profile marked as default)
-  --new-credentials     Interactively create (or overwrite) a stored
-                        credential profile, then exit
-  --remove-credentials NAME
-                        Delete a stored credential profile (with
-                        confirmation), then exit
-  --list-credentials    List stored credential profile names and the current
-                        default, then exit
+user management:
+  -u NAME, --user NAME  Name of the stored user to use for this run (defaults to the
+                        user marked as default)
+  --new-user            Interactively create (or overwrite) a stored user, then exit
+  --remove-user NAME    Delete a stored user (with confirmation), then exit
+  --list-users          List stored user names and the current default, then exit
+  --set-default-user NAME
+                        Set an existing stored user as the default used when -u/--user
+                        is omitted, then exit
 ```
 
-### Managing credential profiles
+### Managing users
 
-Ereddicator can store credentials for multiple Reddit accounts as named profiles:
+Ereddicator can store credentials for multiple Reddit accounts as named users:
 
-- `ereddicator --new-credentials` — interactively create (or overwrite) a profile: pick a name, choose traditional username/password or OAuth (Google login) auth, enter the details, and optionally mark it as the default profile.
-- `ereddicator --list-credentials` — list stored profile names and show which one is the default.
-- `ereddicator --remove-credentials NAME` — delete a stored profile (asks for confirmation first).
-- `ereddicator -c NAME ...` (or `--credentials NAME`) — use a specific profile for that run instead of the default one.
+- `ereddicator --new-user` — interactively create (or overwrite) a user: pick a name, choose traditional username/password or OAuth (Google login) auth, enter the details, and optionally mark it as the default user.
+- `ereddicator --list-users` — list stored user names and show which one is the default.
+- `ereddicator --remove-user NAME` — delete a stored user (asks for confirmation first).
+- `ereddicator --set-default-user NAME` — mark an existing stored user as the default.
+- `ereddicator -u NAME ...` (or `--user NAME`) — use a specific user for that run instead of the default one.
 
-If you don't pass `-c`, the profile marked as default is used. The first profile you ever create is automatically made the default.
+If you don't pass `-u`, the user marked as default is used. The first user you ever create is automatically made the default.
 
-Profiles are stored in a single `credentials.json` file in your OS's standard config directory (e.g. `~/.config/ereddicatorcli/credentials.json` on Linux, `~/Library/Application Support/ereddicatorcli/credentials.json` on macOS, `%APPDATA%\ereddicatorcli\credentials.json` on Windows), so the file location no longer depends on which directory you run the script from.
+Users are stored in a single `users.json` file in your OS's standard config directory (e.g. `~/.config/ereddicatorcli/users.json` on Linux, `~/Library/Application Support/ereddicatorcli/users.json` on macOS, `%APPDATA%\ereddicatorcli\users.json` on Windows), so the file location no longer depends on which directory you run the script from.
 
 ## Reddit Data Export Request
 Reddit's API is limited and sometimes does not retrieve all comments and posts. If you want to ensure you get everything, you will need to make a Reddit data export request:
@@ -153,7 +152,7 @@ Alternatively, to install from a local clone (e.g. if you want to modify the cod
 
    ![Finding Client ID and Secret](images/client-id-and-secret.png)
 
-3. Run `ereddicator --new-credentials` and follow the prompts to save your `client_id`/`client_secret` (and, for traditional accounts, your username/password) as a named credential profile. See [Managing credential profiles](#managing-credential-profiles) for details, including how to store more than one account and pick a default.
-4. Run `ereddicator` or provide arguments like `ereddicator --delete --blacklist aww me_irl`. (See [Command Line Arguments](#command-line-arguments) for options). Use `-c NAME` if you want to use a non-default credential profile for this run.
+3. Run `ereddicator --new-user` and follow the prompts to save your `client_id`/`client_secret` (and, for traditional accounts, your username/password) as a named user. See [Managing users](#managing-users) for details, including how to store more than one account and pick a default.
+4. Run `ereddicator` or provide arguments like `ereddicator --delete --blacklist aww me_irl`. (See [Command Line Arguments](#command-line-arguments) for options). Use `-u NAME` if you want to use a non-default user for this run.
 5. Keep the terminal where you ran the command visible throughout the entire process. This terminal displays authentication status, error messages, and progress updates.
-6. If you're using Google login, you'll be prompted to authorise via a browser the first time you use that profile. After successful authorisation, the refresh token will be saved for future use.
+6. If you're using Google login, you'll be prompted to authorise via a browser the first time you use that user. After successful authorisation, the refresh token will be saved for future use.

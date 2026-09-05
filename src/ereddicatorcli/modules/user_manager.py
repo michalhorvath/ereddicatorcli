@@ -9,20 +9,20 @@ import platformdirs
 from .oauth_handler import RedditOAuth
 
 APP_NAME = "ereddicatorcli"
-CREDENTIALS_FILENAME = "credentials.json"
+USERS_FILENAME = "users.json"
 DEFAULT_KEY = "__default__"
 
 
-class CredentialsError(Exception):
-    """Base class for all credential-store errors."""
+class UserError(Exception):
+    """Base class for all user-store errors."""
 
 
-class CredentialsNotFoundError(CredentialsError):
-    """No stored credentials exist under the given name."""
+class UserNotFoundError(UserError):
+    """No stored user exists under the given name."""
 
 
-class NoDefaultCredentialsError(CredentialsError):
-    """No name was given and no default credentials are set."""
+class NoDefaultUserError(UserError):
+    """No name was given and no default user is set."""
 
 
 def get_config_dir() -> Path:
@@ -31,8 +31,8 @@ def get_config_dir() -> Path:
     return path
 
 
-def get_credentials_path() -> Path:
-    return get_config_dir() / CREDENTIALS_FILENAME
+def get_users_path() -> Path:
+    return get_config_dir() / USERS_FILENAME
 
 
 def get_data_dir() -> Path:
@@ -42,21 +42,21 @@ def get_data_dir() -> Path:
 
 
 def load_store() -> Dict[str, dict]:
-    path = get_credentials_path()
+    path = get_users_path()
     if not path.exists():
         return {}
     try:
         with open(path, "r", encoding="utf-8") as f:
             store = json.load(f)
     except json.JSONDecodeError as e:
-        raise CredentialsError(f"Credentials file at {path} is not valid JSON: {e}") from e
+        raise UserError(f"User file at {path} is not valid JSON: {e}") from e
     if not isinstance(store, dict):
-        raise CredentialsError(f"Credentials file at {path} does not contain a JSON object.")
+        raise UserError(f"User file at {path} does not contain a JSON object.")
     return store
 
 
 def save_store(store: Dict[str, dict]) -> None:
-    path = get_credentials_path()
+    path = get_users_path()
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(store, f, indent=2)
@@ -64,41 +64,41 @@ def save_store(store: Dict[str, dict]) -> None:
     os.replace(tmp_path, path)
 
 
-def list_credentials() -> List[str]:
+def list_users() -> List[str]:
     return [name for name in load_store() if name != DEFAULT_KEY]
 
 
-def credentials_exist(name: str) -> bool:
+def user_exists(name: str) -> bool:
     return name in load_store()
 
 
-def get_default_credentials() -> Optional[str]:
+def get_default_user() -> Optional[str]:
     return load_store().get(DEFAULT_KEY)
 
 
-def set_default_credentials(name: str) -> None:
+def set_default_user(name: str) -> None:
     store = load_store()
     if name not in store:
-        raise CredentialsNotFoundError(f"No stored credentials named '{name}'.")
+        raise UserNotFoundError(f"No stored user named '{name}'.")
     store[DEFAULT_KEY] = name
     save_store(store)
 
 
-def load_credentials(name: Optional[str] = None) -> Dict[str, str]:
+def load_user(name: Optional[str] = None) -> Dict[str, str]:
     store = load_store()
     resolved_name = name
     if resolved_name is None:
         resolved_name = store.get(DEFAULT_KEY)
         if resolved_name is None:
-            raise NoDefaultCredentialsError(
-                "No credentials name was specified and no default credentials are set."
+            raise NoDefaultUserError(
+                "No user name was specified and no default user is set."
             )
     if resolved_name not in store or resolved_name == DEFAULT_KEY:
-        raise CredentialsNotFoundError(f"No stored credentials named '{resolved_name}'.")
+        raise UserNotFoundError(f"No stored user named '{resolved_name}'.")
     return dict(store[resolved_name])
 
 
-def save_credentials(name: str, data: Dict[str, str], make_default: bool = False) -> None:
+def save_user(name: str, data: Dict[str, str], make_default: bool = False) -> None:
     store = load_store()
     had_none_stored = len([k for k in store if k != DEFAULT_KEY]) == 0
     store[name] = data
@@ -107,18 +107,18 @@ def save_credentials(name: str, data: Dict[str, str], make_default: bool = False
     save_store(store)
 
 
-def update_credentials_fields(name: str, **fields) -> None:
+def update_user_fields(name: str, **fields) -> None:
     store = load_store()
     if name not in store or name == DEFAULT_KEY:
-        raise CredentialsNotFoundError(f"No stored credentials named '{name}'.")
+        raise UserNotFoundError(f"No stored user named '{name}'.")
     store[name].update(fields)
     save_store(store)
 
 
-def remove_credentials(name: str) -> None:
+def remove_user(name: str) -> None:
     store = load_store()
     if name not in store or name == DEFAULT_KEY:
-        raise CredentialsNotFoundError(f"No stored credentials named '{name}'.")
+        raise UserNotFoundError(f"No stored user named '{name}'.")
     del store[name]
     if store.get(DEFAULT_KEY) == name:
         del store[DEFAULT_KEY]
@@ -133,8 +133,8 @@ def _prompt_nonempty(prompt: str) -> str:
         print("This field can't be empty.")
 
 
-def run_new_credentials_wizard() -> str:
-    print(f"Credentials are stored in: {get_credentials_path()}\n")
+def run_new_user_wizard() -> str:
+    print(f"Users are stored in: {get_users_path()}\n")
 
     print("Auth method:")
     print("  1) Traditional username/password")
@@ -162,7 +162,7 @@ def run_new_credentials_wizard() -> str:
 
         print(
             "\nNo username/password needed for OAuth. A browser window will open to "
-            "authorise this app. The stored credentials will be named after the Reddit "
+            "authorise this app. The stored user will be named after the Reddit "
             "username you authorise with."
         )
         try:
@@ -171,35 +171,35 @@ def run_new_credentials_wizard() -> str:
         except Exception as e:
             error_str = str(e).lower()
             if "401" in error_str or "unauthorized" in error_str:
-                raise CredentialsError(
+                raise UserError(
                     "OAuth: Invalid client ID or client secret. Please double-check your Reddit API credentials."
                 ) from e
             elif "timeout" in error_str or "did not receive" in error_str:
-                raise CredentialsError(
+                raise UserError(
                     "OAuth: Timeout waiting for authorisation. Please try again and complete the "
                     "authorisation in your browser within 5 minutes."
                 ) from e
             else:
-                raise CredentialsError(f"OAuth: {e}") from e
+                raise UserError(f"OAuth: {e}") from e
         data["username"] = name
         data["refresh_token"] = refresh_token
         print(f"Successfully authorised as {name}")
 
-    if credentials_exist(name):
-        confirm = input(f"Credentials named '{name}' already exist. Overwrite them? [y/N]: ").strip().lower()
+    if user_exists(name):
+        confirm = input(f"A user named '{name}' already exists. Overwrite it? [y/N]: ").strip().lower()
         if confirm != "y":
             raise KeyboardInterrupt("Cancelled by user.")
 
-    if get_default_credentials() is None:
-        answer = input("No default credentials are set. Set these as the default? [Y/n]: ").strip().lower()
+    if get_default_user() is None:
+        answer = input("No default user is set. Set this as the default? [Y/n]: ").strip().lower()
         make_default = answer != "n"
     else:
         make_default = False
 
-    save_credentials(name, data, make_default=make_default)
+    save_user(name, data, make_default=make_default)
 
-    is_default = get_default_credentials() == name
-    print(f"\nSaved credentials '{name}' to {get_credentials_path()}")
+    is_default = get_default_user() == name
+    print(f"\nSaved user '{name}' to {get_users_path()}")
     print(f"Default: {'yes' if is_default else 'no'}")
 
     return name

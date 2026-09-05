@@ -8,7 +8,7 @@ import praw
 from .modules.reddit_auth import RedditAuth
 from .modules.reddit_content_remover import RedditContentRemover
 from .modules.user_preferences import UserPreferences
-from .modules import credentials_manager
+from .modules import user_manager
 
 
 def run_content_remover(preferences: UserPreferences, reddit: praw.Reddit, auth: RedditAuth) -> None:
@@ -98,81 +98,81 @@ def main():
     
     action_group = parser.add_mutually_exclusive_group()
     action_group.add_argument("--delete", action="store_true", help="Delete content after editing")
-    action_group.add_argument("--delete_only", action="store_true", help="Delete content without editing")
-    action_group.add_argument("--edit_only", action="store_true", help="Only edit content without deleting")
+    action_group.add_argument("--delete-only", action="store_true", help="Delete content without editing")
+    action_group.add_argument("--edit-only", action="store_true", help="Only edit content without deleting")
     
-    parser.add_argument("--dry_run", action="store_true", help="Enable dry run mode (no actual changes made)")
+    parser.add_argument("--dry-run", action="store_true", help="Enable dry run mode (no actual changes made)")
     list_group = parser.add_mutually_exclusive_group()
     list_group.add_argument("--whitelist", nargs="+", help="List of subreddits to preserve (not process)")
     list_group.add_argument("--blacklist", nargs="+", help="List of subreddits to exclusively process")
 
-    credentials_group = parser.add_argument_group("credential management")
-    credentials_group.add_argument(
-        "-c", "--credentials", metavar="NAME",
-        help="Name of the stored credentials to use for this run (defaults to the credentials marked as default)"
+    user_group = parser.add_argument_group("user management")
+    user_group.add_argument(
+        "-u", "--user", metavar="NAME",
+        help="Name of the stored user to use for this run (defaults to the user marked as default)"
     )
 
-    mgmt_group = credentials_group.add_mutually_exclusive_group()
+    mgmt_group = user_group.add_mutually_exclusive_group()
     mgmt_group.add_argument(
-        "--new-credentials", action="store_true",
-        help="Interactively create (or overwrite) stored credentials, then exit"
+        "--new-user", action="store_true",
+        help="Interactively create (or overwrite) a stored user, then exit"
     )
     mgmt_group.add_argument(
-        "--remove-credentials", metavar="NAME",
-        help="Delete stored credentials (with confirmation), then exit"
+        "--remove-user", metavar="NAME",
+        help="Delete a stored user (with confirmation), then exit"
     )
     mgmt_group.add_argument(
-        "--list-credentials", action="store_true",
-        help="List stored credential names and the current default, then exit"
+        "--list-users", action="store_true",
+        help="List stored user names and the current default, then exit"
     )
     mgmt_group.add_argument(
-        "--set-default-credentials", metavar="NAME",
-        help="Set existing stored credentials as the default used when -c/--credentials is omitted, then exit"
+        "--set-default-user", metavar="NAME",
+        help="Set an existing stored user as the default used when -u/--user is omitted, then exit"
     )
 
     args = parser.parse_args()
 
-    if args.new_credentials:
+    if args.new_user:
         try:
-            credentials_manager.run_new_credentials_wizard()
+            user_manager.run_new_user_wizard()
         except (KeyboardInterrupt, EOFError):
             print("\nCancelled.")
         return
 
-    if args.remove_credentials:
-        name = args.remove_credentials
-        if not credentials_manager.credentials_exist(name):
-            print(f"No stored credentials named '{name}'.")
+    if args.remove_user:
+        name = args.remove_user
+        if not user_manager.user_exists(name):
+            print(f"No stored user named '{name}'.")
             return
-        confirm = input(f"Remove credentials '{name}'? This cannot be undone. [y/N]: ").strip().lower()
+        confirm = input(f"Remove user '{name}'? This cannot be undone. [y/N]: ").strip().lower()
         if confirm != "y":
             print("Cancelled.")
             return
-        was_default = credentials_manager.get_default_credentials() == name
-        credentials_manager.remove_credentials(name)
-        print(f"Removed credentials '{name}'.")
+        was_default = user_manager.get_default_user() == name
+        user_manager.remove_user(name)
+        print(f"Removed user '{name}'.")
         if was_default:
-            print("Those were your default credentials. No default is set now — "
-                  "run --new-credentials or pass -c/--credentials NAME explicitly next time.")
+            print("That was your default user. No default is set now — "
+                  "run --new-user or pass -u/--user NAME explicitly next time.")
         return
 
-    if args.set_default_credentials:
-        name = args.set_default_credentials
+    if args.set_default_user:
+        name = args.set_default_user
         try:
-            credentials_manager.set_default_credentials(name)
-        except credentials_manager.CredentialsNotFoundError as e:
+            user_manager.set_default_user(name)
+        except user_manager.UserNotFoundError as e:
             print(e)
             return
-        print(f"Default credentials set to '{name}'.")
+        print(f"Default user set to '{name}'.")
         return
 
-    if args.list_credentials:
-        names = credentials_manager.list_credentials()
-        default = credentials_manager.get_default_credentials()
+    if args.list_users:
+        names = user_manager.list_users()
+        default = user_manager.get_default_user()
         if not names:
-            print("No stored credentials. Run 'python main.py --new-credentials' to create some.")
+            print("No stored users. Run 'ereddicator --new-user' to create one.")
         else:
-            print("Stored credentials:")
+            print("Stored users:")
             for n in names:
                 print(f"  {n}" + ("  (default)" if n == default else ""))
         return
@@ -183,7 +183,7 @@ def main():
     while reddit is None:
         try:
             # Create an instance of RedditAuth and get the Reddit instance
-            auth = RedditAuth(credentials_name=args.credentials)
+            auth = RedditAuth(user=args.user)
             reddit = auth.get_reddit_instance()
         except Exception as e:
             error_message = str(e)

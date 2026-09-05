@@ -12,7 +12,7 @@ from prawcore import ResponseException
 from prawcore.exceptions import Forbidden, NotFound
 from .user_preferences import UserPreferences
 from .rate_limiter import SharedRateLimiter
-from . import credentials_manager
+from . import user_manager
 
 
 class RedditContentRemover:
@@ -38,7 +38,7 @@ class RedditContentRemover:
         self.total_deleted_dict = {k: 0 for k in ["comments", "posts", "saved", "upvotes", "downvotes", "hidden"]}
         self.total_edited_dict = {k: 0 for k in ["comments", "posts"]}
         self.processed_ids_file = str(
-            credentials_manager.get_data_dir() / f"ereddicator_{self.username}_processed_ids.txt"
+            user_manager.get_data_dir() / f"ereddicator_{self.username}_processed_ids.txt"
         )
         self.processed_ids = self.load_processed_ids()
         self.processed_ids_lock = threading.Lock()
