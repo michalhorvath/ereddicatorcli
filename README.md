@@ -12,6 +12,7 @@ This Python CLI app allows you to edit and/or delete all your Reddit comments, p
 
 - [Features](#features)
 - [Command Line Arguments](#command-line-arguments)
+- [Configuration Files](#configuration-files)
 - [Reddit Data Export Request](#reddit-data-export-request)
 - [Instructions (for Python Users)](#instructions-for-python-users)
 - [Support Me](#buy-me-a-coffee)
@@ -41,6 +42,7 @@ This Python CLI app allows you to edit and/or delete all your Reddit comments, p
 - **Dry Run Mode**: Simulate the removal process without actually making any changes. In this mode, Ereddicator will print out what actions would be taken (e.g. what comments and posts will be deleted) without modifying any of your Reddit content.
 - **Custom Replacement Text**: Specify custom text to replace your content during editing or before deletion. If not provided, random text will be used.
 - **Persistent Processing**: Tracks which items have already been processed across multiple runs, ensuring that items are not processed again if the script is restarted or interrupted. This progress file is stored in your OS's application data directory (see [Instructions](#instructions-for-python-users)), so it works no matter which directory you launch the script from.
+- **Configuration Files**: Store named sets of options in a JSON config file and pick one per run with `-c`/`--config`. See [Configuration Files](#configuration-files).
 - **Multiple Users**: Store credentials for more than one Reddit account and pick which one to use per run with `-u`/`--user`. See [Command Line Arguments](#command-line-arguments).
 - **Advertise Option**: When enabled, there's a 50% chance for each comment or post to be replaced with a simple message mentioning Ereddicator instead of random text or custom text.
 
@@ -53,6 +55,10 @@ usage: ereddicator [-h] [--delete | --delete-only | --edit-only] [--dry-run]
                    [--whitelist WHITELIST [WHITELIST ...] | --blacklist BLACKLIST
                    [BLACKLIST ...]] [-u NAME]
                    [--new-user | --remove-user NAME | --list-users | --set-default-user NAME]
+                   [-c NAME] [--no-config]
+                   [--new-config | --remove-config NAME | --list-configs |
+                   --set-default-config NAME | --show-config | --config-options |
+                   --edit-config]
 
 EreddicatorCLI
 
@@ -76,6 +82,23 @@ user management:
   --set-default-user NAME
                         Set an existing stored user as the default used when -u/--user
                         is omitted, then exit
+
+configuration:
+
+  -c NAME, --config NAME
+                        Name of the stored config to use for this run (defaults to the
+                        config marked as default)
+  --no-config           Ignore the default config for this run
+  --new-config          Interactively create (or overwrite) a stored config, then exit
+  --remove-config NAME  Delete a stored config (with confirmation), then exit
+  --list-configs        List stored config names and the current default, then exit
+  --set-default-config NAME
+                        Set an existing stored config as the default used when
+                        -c/--config is omitted, then exit
+  --show-config         Print the config selected by -c/--config (or the default one),
+                        then exit
+  --config-options      List every option a config can set, then exit
+  --edit-config         Open the config file in $EDITOR, then exit
 ```
 
 ### Managing users
@@ -91,6 +114,14 @@ Ereddicator can store credentials for multiple Reddit accounts as named users:
 If you don't pass `-u`, the user marked as default is used. The first user you ever create is automatically made the default.
 
 Users are stored in a single `users.json` file in your OS's standard config directory (e.g. `~/.config/ereddicatorcli/users.json` on Linux, `~/Library/Application Support/ereddicatorcli/users.json` on macOS, `%APPDATA%\ereddicatorcli\users.json` on Windows), so the file location no longer depends on which directory you run the script from.
+
+## Configuration Files
+
+Ereddicator can store multiple config options to give you oportinity to quickly and repetitively run the script with the same options.
+
+If you don't pass `-c`, the config named "default" is used. If no default config is set, Erradicator will use it's initial config. Config can be overriden with command line arguments.
+
+The configs are stored in a single file `config.json` in your OS's standard config directory (e.g. `~/.config/ereddicatorcli/config.json` on Linux, `~/Library/Application Support/ereddicatorcli/config.json` on macOS, `%APPDATA%\ereddicatorcli\config.json` on Windows).
 
 ## Reddit Data Export Request
 Reddit's API is limited and sometimes does not retrieve all comments and posts. If you want to ensure you get everything, you will need to make a Reddit data export request:
@@ -153,6 +184,6 @@ Alternatively, to install from a local clone (e.g. if you want to modify the cod
    ![Finding Client ID and Secret](images/client-id-and-secret.png)
 
 3. Run `ereddicator --new-user` and follow the prompts to save your `client_id`/`client_secret` (and, for traditional accounts, your username/password) as a named user. See [Managing users](#managing-users) for details, including how to store more than one account and pick a default.
-4. Run `ereddicator` or provide arguments like `ereddicator --delete --blacklist aww me_irl`. (See [Command Line Arguments](#command-line-arguments) for options). Use `-u NAME` if you want to use a non-default user for this run.
+4. Run `ereddicator` or provide arguments like `ereddicator --delete --blacklist aww me_irl`. (See [Command Line Arguments](#command-line-arguments) for options). Use `-u NAME` if you want to use a non-default user for this run. For options that have no command line argument — karma thresholds, date ranges, saved items, votes, hidden posts, custom replacement text or a Reddit export directory — create a config with `ereddicator --new-config` (see [Configuration Files](#configuration-files)).
 5. Keep the terminal where you ran the command visible throughout the entire process. This terminal displays authentication status, error messages, and progress updates.
 6. If you're using Google login, you'll be prompted to authorise via a browser the first time you use that user. After successful authorisation, the refresh token will be saved for future use.
