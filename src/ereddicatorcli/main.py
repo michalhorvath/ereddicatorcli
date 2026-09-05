@@ -36,10 +36,10 @@ def run_content_remover(preferences: UserPreferences, reddit: praw.Reddit, auth:
 
     def interrupt_handler(signum, frame):
         print("\nInterrupt received. Stopping content removal...")
+        content_remover.interrupt_flag = True
         print("Saving processed IDs before exit...")
         content_remover.save_processed_ids()
         print("Forcing exit in 5 seconds if graceful shutdown fails...")
-        content_remover.interrupt_flag = True
 
         # Set a timer to force exit if graceful shutdown doesn't work
         def force_exit():
@@ -193,7 +193,6 @@ def main():
                 return
 
             print(e)
-            return
     
     # Load user preferences
 

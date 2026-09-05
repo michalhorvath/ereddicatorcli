@@ -1,4 +1,5 @@
 import random
+import threading
 import time
 import os
 import csv
@@ -40,6 +41,7 @@ class RedditContentRemover:
             credentials_manager.get_data_dir() / f"ereddicator_{self.username}_processed_ids.txt"
         )
         self.processed_ids = self.load_processed_ids()
+        self.processed_ids_lock = threading.Lock()
         self.interrupt_flag = False
         self.rate_limiter = SharedRateLimiter(default_delay=0.0)
 
@@ -125,10 +127,12 @@ class RedditContentRemover:
             None
         """
         try:
+            with self.processed_ids_lock:
+                ids_snapshot = list(self.processed_ids)
             with open(self.processed_ids_file, "w") as f:
-                for item_id in self.processed_ids:
+                for item_id in ids_snapshot:
                     f.write(f"{item_id}\n")
-            print(f"Saved {len(self.processed_ids)} processed IDs to {self.processed_ids_file}")
+            print(f"Saved {len(ids_snapshot)} processed IDs to {self.processed_ids_file}")
         except Exception as e:
             print(f"Error saving processed IDs: {e}")
 
@@ -349,7 +353,9 @@ class RedditContentRemover:
             return (deleted_count, edited_count)
 
         if hasattr(item, "id"):
-            if item.id in self.processed_ids:
+            with self.processed_ids_lock:
+                already_processed = item.id in self.processed_ids
+            if already_processed:
                 print(f"Skipping already processed item with ID: {item.id}")
                 return (deleted_count, edited_count)
 
@@ -370,7 +376,7 @@ class RedditContentRemover:
                             print(f"Deleting comment without editing: '{item_info}'")
                             item.delete()
                             deleted_count = 1
-                            action_performed = True
+                        action_performed = True
                     elif self.preferences.only_edit_comments:
                         if self.preferences.dry_run:
                             print(f"[DRY RUN] Would edit comment: '{item_info}'")
@@ -378,7 +384,7 @@ class RedditContentRemover:
                         else:
                             if self.edit_item_multiple_times(item, item_type, item_info):
                                 edited_count = 1
-                                action_performed = True
+                        action_performed = True
                     else:
                         if self.preferences.dry_run:
                             print(f"[DRY RUN] Would edit and delete comment: '{item_info}'")
@@ -388,7 +394,7 @@ class RedditContentRemover:
                                 print(f"Deleting comment: '{item_info}'")
                                 item.delete()
                                 deleted_count = 1
-                                action_performed = True
+                        action_performed = True
 
                 elif item_type == "posts":
                     if item.is_self:
@@ -400,6 +406,7 @@ class RedditContentRemover:
                                 print(f"Deleting text post without editing: '{item_info}'")
                                 item.delete()
                                 deleted_count = 1
+                            action_performed = True
                         elif self.preferences.only_edit_posts:
                             if self.preferences.dry_run:
                                 print(f"[DRY RUN] Would edit text post: '{item_info}'")
@@ -407,17 +414,16 @@ class RedditContentRemover:
                             else:
                                 if self.edit_item_multiple_times(item, item_type, item_info):
                                     edited_count = 1
-                                action_performed = True
+                            action_performed = True
                         else:
                             if self.preferences.dry_run:
                                 print(f"[DRY RUN] Would edit and delete text post: '{item_info}'")
-                                deleted_count = 1
                             else:
                                 if self.edit_item_multiple_times(item, item_type, item_info):
                                     print(f"Deleting text post: '{item_info}'")
                                     item.delete()
-                                    deleted_count = 1
-                                    action_performed = True
+                            deleted_count = 1
+                            action_performed = True
                     else:
                         if not self.preferences.delete_without_edit_posts:
                             print(f"It is impossible to edit content of 'Link {item_info}'.")
@@ -444,8 +450,8 @@ class RedditContentRemover:
                     else:
                         print(f"Attempting to clear {item_type[:-1]} on item: {item_info}")
                         item.clear_vote()
-                        deleted_count = 1
-                        action_performed = True
+                    deleted_count = 1
+                    action_performed = True
                 elif item_type == "hidden":
                     if self.preferences.dry_run:
                         print(f"[DRY RUN] Would unhide post: {item_info}")
@@ -457,7 +463,8 @@ class RedditContentRemover:
 
                 if action_performed:
                     if hasattr(item, "id"):
-                        self.processed_ids.add(item.id)
+                        with self.processed_ids_lock:
+                            self.processed_ids.add(item.id)
                     return (deleted_count, edited_count)
 
             except (praw.exceptions.RedditAPIException, ResponseException) as e:

@@ -103,9 +103,9 @@ class UserPreferences:
             bool: True if the subreddit should be processed, False otherwise.
         """
         if self.whitelist_subreddits:
-            return subreddit_name.lower() not in self.whitelist_subreddits
+            return subreddit_name.lower() not in {sub.lower() for sub in self.whitelist_subreddits}
         elif self.blacklist_subreddits:
-            return subreddit_name.lower() in self.blacklist_subreddits
+            return subreddit_name.lower() in {sub.lower() for sub in self.blacklist_subreddits}
         return True
 
     def is_within_date_range(self, item_date: datetime) -> bool:
