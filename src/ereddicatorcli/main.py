@@ -1,6 +1,7 @@
 import argparse
 import os
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -8,7 +9,7 @@ import praw
 from .modules.reddit_auth import RedditAuth
 from .modules.reddit_content_remover import RedditContentRemover
 from .modules.user_preferences import UserPreferences
-from .modules import user_manager
+from .modules import config_manager, user_manager
 
 
 def run_content_remover(preferences: UserPreferences, reddit: praw.Reddit, auth: RedditAuth) -> None:
@@ -92,6 +93,126 @@ def run_content_remover(preferences: UserPreferences, reddit: praw.Reddit, auth:
             print(f"{item_type.capitalize()} edited: {count}")
 
 
+def handle_config_commands(args: argparse.Namespace) -> bool:
+    """
+    Run any config management command given on the command line.
+
+    Args:
+        args (argparse.Namespace): Parsed command line arguments.
+
+    Returns:
+        bool: True if a management command was handled and the program should
+            exit, False if the run should continue.
+
+    Raises:
+        config_manager.ConfigError: If the config file cannot be read, or the
+            named config is missing or invalid.
+    """
+    if args.config_options:
+        print(config_manager.format_options_help())
+        return True
+
+    if args.new_config:
+        try:
+            config_manager.run_new_config_wizard()
+        except (KeyboardInterrupt, EOFError):
+            print("\nCancelled.")
+        return True
+
+    if args.remove_config:
+        name = args.remove_config
+        if not config_manager.config_exists(name):
+            print(f"No config named '{name}'.")
+            return True
+        confirm = input(f"Remove config '{name}'? This cannot be undone. [y/N]: ").strip().lower()
+        if confirm != "y":
+            print("Cancelled.")
+            return True
+        was_default = config_manager.get_default_config() == name
+        config_manager.remove_config(name)
+        print(f"Removed config '{name}'.")
+        if was_default:
+            print("That was your default config. No default is set now — "
+                  "pass -c/--config NAME explicitly or set a new default.")
+        return True
+
+    if args.set_default_config:
+        name = args.set_default_config
+        config_manager.set_default_config(name)
+        print(f"Default config set to '{name}'.")
+        return True
+
+    if args.list_configs:
+        names = config_manager.list_configs()
+        default = config_manager.get_default_config()
+        if not names:
+            print("No stored configs. Run 'ereddicator --new-config' to create one.")
+        else:
+            print(f"Config file: {config_manager.get_config_path()}")
+            print("Stored configs:")
+            for name in names:
+                print(f"  {name}" + ("  (default)" if name == default else ""))
+        return True
+
+    if args.show_config:
+        name = args.config if args.config is not None else config_manager.get_default_config()
+        data = config_manager.load_config(args.config)
+        print(config_manager.format_config(name, data))
+        return True
+
+    if args.edit_config:
+        path = config_manager.get_config_path()
+        if not path.exists():
+            print(f"No config file at {path}. Run 'ereddicator --new-config' to create one.")
+            return True
+        editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "nano"
+        try:
+            subprocess.call([editor, str(path)])
+        except OSError as e:
+            print(f"Could not open '{editor}': {e}\nEdit {path} manually instead.")
+            sys.exit(1)
+        try:
+            store = config_manager.load_store()
+            for name in config_manager.list_configs():
+                config_manager.validate_config(store[name], name)
+        except config_manager.ConfigError as e:
+            raise config_manager.ConfigError(f"The config file is not usable as saved:\n{e}") from e
+        return True
+
+    return False
+
+
+def resolve_config(args: argparse.Namespace) -> dict:
+    """
+    Load and validate the stored config that applies to this run.
+
+    Args:
+        args (argparse.Namespace): Parsed command line arguments.
+
+    Returns:
+        dict: Validated options of the selected config, empty if no config
+            applies to this run.
+
+    Raises:
+        SystemExit: If --no-config is combined with -c/--config.
+        config_manager.ConfigError: If the selected config is missing or
+            contains invalid options.
+    """
+    if args.no_config:
+        if args.config:
+            print("--no-config cannot be combined with -c/--config.")
+            sys.exit(1)
+        return {}
+
+    name = args.config if args.config is not None else config_manager.get_default_config()
+    if name is None:
+        return {}
+
+    validated = config_manager.validate_config(config_manager.load_config(name), name)
+    print(f"Using config '{name}'.")
+    return validated
+
+
 def main():
     # Parse arguments
     parser = argparse.ArgumentParser(prog="ereddicator", description="EreddicatorCLI")
@@ -112,25 +233,77 @@ def main():
         help="Name of the stored user to use for this run (defaults to the user marked as default)"
     )
 
-    mgmt_group = user_group.add_mutually_exclusive_group()
-    mgmt_group.add_argument(
+    user_mgmt_group = user_group.add_mutually_exclusive_group()
+    user_mgmt_group.add_argument(
         "--new-user", action="store_true",
         help="Interactively create (or overwrite) a stored user, then exit"
     )
-    mgmt_group.add_argument(
+    user_mgmt_group.add_argument(
         "--remove-user", metavar="NAME",
         help="Delete a stored user (with confirmation), then exit"
     )
-    mgmt_group.add_argument(
+    user_mgmt_group.add_argument(
         "--list-users", action="store_true",
         help="List stored user names and the current default, then exit"
     )
-    mgmt_group.add_argument(
+    user_mgmt_group.add_argument(
         "--set-default-user", metavar="NAME",
         help="Set an existing stored user as the default used when -u/--user is omitted, then exit"
     )
 
+    config_group = parser.add_argument_group(
+        "configuration",
+        "Named configs are stored in a JSON config file and can set more options than the "
+        "arguments above expose. Any argument given on the command line overrides the config. "
+        "Which account to run against is not part of a config: use -u/--user."
+    )
+    config_group.add_argument(
+        "-c", "--config", metavar="NAME",
+        help="Name of the stored config to use for this run (defaults to the config marked as default)"
+    )
+    config_group.add_argument(
+        "--no-config", action="store_true",
+        help="Ignore the default config for this run"
+    )
+
+    config_mgmt_group = config_group.add_mutually_exclusive_group()
+    config_mgmt_group.add_argument(
+        "--new-config", action="store_true",
+        help="Interactively create (or overwrite) a stored config, then exit"
+    )
+    config_mgmt_group.add_argument(
+        "--remove-config", metavar="NAME",
+        help="Delete a stored config (with confirmation), then exit"
+    )
+    config_mgmt_group.add_argument(
+        "--list-configs", action="store_true",
+        help="List stored config names and the current default, then exit"
+    )
+    config_mgmt_group.add_argument(
+        "--set-default-config", metavar="NAME",
+        help="Set an existing stored config as the default used when -c/--config is omitted, then exit"
+    )
+    config_mgmt_group.add_argument(
+        "--show-config", action="store_true",
+        help="Print the config selected by -c/--config (or the default one), then exit"
+    )
+    config_mgmt_group.add_argument(
+        "--config-options", action="store_true",
+        help="List every option a config can set, then exit"
+    )
+    config_mgmt_group.add_argument(
+        "--edit-config", action="store_true",
+        help="Open the config file in $EDITOR, then exit"
+    )
+
     args = parser.parse_args()
+
+    try:
+        if handle_config_commands(args):
+            return
+    except config_manager.ConfigError as e:
+        print(e)
+        sys.exit(1)
 
     if args.new_user:
         try:
@@ -177,6 +350,13 @@ def main():
                 print(f"  {n}" + ("  (default)" if n == default else ""))
         return
 
+    # Validate the config before authenticating, so a broken one is reported early.
+    try:
+        config_options = resolve_config(args)
+    except config_manager.ConfigError as e:
+        print(e)
+        sys.exit(1)
+
     # Keep trying authentication until successful or user gives up.
     reddit = None
     auth = None
@@ -194,10 +374,11 @@ def main():
 
             print(e)
     
-    # Load user preferences
+    # Load user preferences: stored config first, then command line overrides.
 
     preferences = UserPreferences()
-    
+    config_manager.apply_config(preferences, config_options)
+
     if args.delete:
         preferences.delete_comments = True
         preferences.delete_posts = True
@@ -223,11 +404,15 @@ def main():
     if args.dry_run:
         preferences.dry_run = True
 
+    # Whitelisting and blacklisting are mutually exclusive, so a list given on the
+    # command line replaces both lists from the config rather than adding to them.
     if args.whitelist:
         preferences.whitelist_subreddits = args.whitelist
+        preferences.blacklist_subreddits = []
 
     if args.blacklist:
         preferences.blacklist_subreddits = args.blacklist
+        preferences.whitelist_subreddits = []
 
     # Execute content remover
     run_content_remover(preferences, reddit, auth)
