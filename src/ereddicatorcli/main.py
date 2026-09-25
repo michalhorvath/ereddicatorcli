@@ -5,11 +5,12 @@ import subprocess
 import sys
 import threading
 import time
+from typing import Optional, Tuple
 import praw
 from .modules.reddit_auth import RedditAuth
 from .modules.reddit_content_remover import RedditContentRemover
 from .modules.user_preferences import UserPreferences
-from .modules import config_manager, user_manager
+from .modules import config_manager, run_summary, user_manager
 
 
 def run_content_remover(preferences: UserPreferences, reddit: praw.Reddit, auth: RedditAuth) -> None:
@@ -91,6 +92,62 @@ def run_content_remover(preferences: UserPreferences, reddit: praw.Reddit, auth:
             print(f"{item_type.capitalize()} deleted: {count}")
         for item_type, count in content_remover.total_edited_dict.items():
             print(f"{item_type.capitalize()} edited: {count}")
+
+
+def build_preferences(args: argparse.Namespace, config_options: dict) -> UserPreferences:
+    """
+    Build the preferences for a run from the stored config and command line.
+
+    The config is applied first and any argument given on the command line
+    overrides it.
+
+    Args:
+        args (argparse.Namespace): Parsed command line arguments.
+        config_options (dict): Validated options of the config that applies to
+            this run, as returned by resolve_config.
+
+    Returns:
+        UserPreferences: The preferences the run will use.
+    """
+    preferences = UserPreferences()
+    config_manager.apply_config(preferences, config_options)
+
+    if args.delete:
+        preferences.delete_comments = True
+        preferences.delete_posts = True
+        preferences.only_edit_comments = False
+        preferences.only_edit_posts = False
+        preferences.delete_without_edit_comments = False
+        preferences.delete_without_edit_posts = False
+    elif args.delete_only:
+        preferences.delete_without_edit_comments = True
+        preferences.delete_without_edit_posts = True
+        preferences.delete_comments = False
+        preferences.delete_posts = False
+        preferences.only_edit_comments = False
+        preferences.only_edit_posts = False
+    elif args.edit_only:
+        preferences.only_edit_comments = True
+        preferences.only_edit_posts = True
+        preferences.delete_comments = False
+        preferences.delete_posts = False
+        preferences.delete_without_edit_comments = False
+        preferences.delete_without_edit_posts = False
+
+    if args.dry_run:
+        preferences.dry_run = True
+
+    # Whitelisting and blacklisting are mutually exclusive, so a list given on the
+    # command line replaces both lists from the config rather than adding to them.
+    if args.whitelist:
+        preferences.whitelist_subreddits = args.whitelist
+        preferences.blacklist_subreddits = []
+
+    if args.blacklist:
+        preferences.blacklist_subreddits = args.blacklist
+        preferences.whitelist_subreddits = []
+
+    return preferences
 
 
 def handle_config_commands(args: argparse.Namespace) -> bool:
@@ -182,7 +239,7 @@ def handle_config_commands(args: argparse.Namespace) -> bool:
     return False
 
 
-def resolve_config(args: argparse.Namespace) -> dict:
+def resolve_config(args: argparse.Namespace) -> Tuple[Optional[str], dict]:
     """
     Load and validate the stored config that applies to this run.
 
@@ -190,8 +247,9 @@ def resolve_config(args: argparse.Namespace) -> dict:
         args (argparse.Namespace): Parsed command line arguments.
 
     Returns:
-        dict: Validated options of the selected config, empty if no config
-            applies to this run.
+        Tuple[Optional[str], dict]: Name of the selected config and its
+            validated options. The name is None and the options are empty if no
+            config applies to this run.
 
     Raises:
         SystemExit: If --no-config is combined with -c/--config.
@@ -202,15 +260,15 @@ def resolve_config(args: argparse.Namespace) -> dict:
         if args.config:
             print("--no-config cannot be combined with -c/--config.")
             sys.exit(1)
-        return {}
+        return None, {}
 
     name = args.config if args.config is not None else config_manager.get_default_config()
     if name is None:
-        return {}
+        return None, {}
 
     validated = config_manager.validate_config(config_manager.load_config(name), name)
     print(f"Using config '{name}'.")
-    return validated
+    return name, validated
 
 
 def main():
@@ -223,6 +281,10 @@ def main():
     action_group.add_argument("--edit-only", action="store_true", help="Only edit content without deleting")
     
     parser.add_argument("--dry-run", action="store_true", help="Enable dry run mode (no actual changes made)")
+    parser.add_argument(
+        "-y", "--yes", action="store_true",
+        help="Skip the summary confirmation prompt and start the run immediately"
+    )
     list_group = parser.add_mutually_exclusive_group()
     list_group.add_argument("--whitelist", nargs="+", help="List of subreddits to preserve (not process)")
     list_group.add_argument("--blacklist", nargs="+", help="List of subreddits to exclusively process")
@@ -352,10 +414,29 @@ def main():
 
     # Validate the config before authenticating, so a broken one is reported early.
     try:
-        config_options = resolve_config(args)
+        config_name, config_options = resolve_config(args)
     except config_manager.ConfigError as e:
         print(e)
         sys.exit(1)
+
+    # Load user preferences: stored config first, then command line overrides.
+    preferences = build_preferences(args, config_options)
+
+    if not preferences.any_selected():
+        print("No content types selected for deletion or editing. Exiting.")
+        return
+
+    # Read the account out of the user store, so the run can be summarised and
+    # confirmed before authenticating.
+    try:
+        user_name, reddit_username = run_summary.resolve_account(args.user)
+    except user_manager.UserError as e:
+        print(f"{e}\nRun 'ereddicator --help' for user management options.")
+        sys.exit(1)
+
+    summary = run_summary.format_run_summary(preferences, user_name, reddit_username, config_name)
+    if not run_summary.confirm_run(summary, args.yes):
+        return
 
     # Keep trying authentication until successful or user gives up.
     reddit = None
@@ -373,46 +454,6 @@ def main():
                 return
 
             print(e)
-    
-    # Load user preferences: stored config first, then command line overrides.
-
-    preferences = UserPreferences()
-    config_manager.apply_config(preferences, config_options)
-
-    if args.delete:
-        preferences.delete_comments = True
-        preferences.delete_posts = True
-        preferences.only_edit_comments = False
-        preferences.only_edit_posts = False
-        preferences.delete_without_edit_comments = False
-        preferences.delete_without_edit_posts = False
-    elif args.delete_only:
-        preferences.delete_without_edit_comments = True
-        preferences.delete_without_edit_posts = True
-        preferences.delete_comments = False
-        preferences.delete_posts = False
-        preferences.only_edit_comments = False
-        preferences.only_edit_posts = False
-    elif args.edit_only:
-        preferences.only_edit_comments = True
-        preferences.only_edit_posts = True
-        preferences.delete_comments = False
-        preferences.delete_posts = False
-        preferences.delete_without_edit_comments = False
-        preferences.delete_without_edit_posts = False
-
-    if args.dry_run:
-        preferences.dry_run = True
-
-    # Whitelisting and blacklisting are mutually exclusive, so a list given on the
-    # command line replaces both lists from the config rather than adding to them.
-    if args.whitelist:
-        preferences.whitelist_subreddits = args.whitelist
-        preferences.blacklist_subreddits = []
-
-    if args.blacklist:
-        preferences.blacklist_subreddits = args.blacklist
-        preferences.whitelist_subreddits = []
 
     # Execute content remover
     run_content_remover(preferences, reddit, auth)

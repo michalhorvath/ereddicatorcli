@@ -52,7 +52,7 @@ You can run the script with the following arguments to set or override preferenc
 
 ```text
 usage: ereddicator [-h] [--delete | --delete-only | --edit-only] [--dry-run]
-                   [--whitelist WHITELIST [WHITELIST ...] | --blacklist BLACKLIST
+                   [-y] [--whitelist WHITELIST [WHITELIST ...] | --blacklist BLACKLIST
                    [BLACKLIST ...]] [-u NAME]
                    [--new-user | --remove-user NAME | --list-users | --set-default-user NAME]
                    [-c NAME] [--no-config]
@@ -68,6 +68,8 @@ options:
   --delete-only         Delete content without editing
   --edit-only           Only edit content without deleting
   --dry-run             Enable dry run mode (no actual changes made)
+  -y, --yes             Skip the summary confirmation prompt and start the run
+                        immediately
   --whitelist WHITELIST [WHITELIST ...]
                         List of subreddits to preserve (not process)
   --blacklist BLACKLIST [BLACKLIST ...]
@@ -185,5 +187,6 @@ Alternatively, to install from a local clone (e.g. if you want to modify the cod
 
 3. Run `ereddicator --new-user` and follow the prompts to save your `client_id`/`client_secret` (and, for traditional accounts, your username/password) as a named user. See [Managing users](#managing-users) for details, including how to store more than one account and pick a default.
 4. Run `ereddicator` or provide arguments like `ereddicator --delete --blacklist aww me_irl`. (See [Command Line Arguments](#command-line-arguments) for options). Use `-u NAME` if you want to use a non-default user for this run. For options that have no command line argument — karma thresholds, date ranges, saved items, votes, hidden posts, custom replacement text or a Reddit export directory — create a config with `ereddicator --new-config` (see [Configuration Files](#configuration-files)).
-5. Keep the terminal where you ran the command visible throughout the entire process. This terminal displays authentication status, error messages, and progress updates.
-6. If you're using Google login, you'll be prompted to authorise via a browser the first time you use that user. After successful authorisation, the refresh token will be saved for future use.
+5. Ereddicator prints a summary of the account and settings and waits for `y` before doing anything. Pass `-y` to skip the prompt entirely.
+6. Keep the terminal where you ran the command visible throughout the entire process. This terminal displays authentication status, error messages, and progress updates.
+7. If you're using Google login, you'll be prompted to authorise via a browser the first time you use that user. After successful authorisation, the refresh token will be saved for future use.
