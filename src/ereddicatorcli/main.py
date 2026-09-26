@@ -5,7 +5,7 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 import praw
 from .modules.reddit_auth import RedditAuth
 from .modules.reddit_content_remover import RedditContentRemover
@@ -94,6 +94,171 @@ def run_content_remover(preferences: UserPreferences, reddit: praw.Reddit, auth:
             print(f"{item_type.capitalize()} edited: {count}")
 
 
+CONTENT_TYPES: Tuple[Tuple[str, str], ...] = (("comments", "comment"), ("posts", "post"))
+
+MODES: Tuple[str, ...] = ("delete", "delete_only", "edit_only")
+
+
+def _flag_name(attribute: str) -> str:
+    """
+    Render the command line spelling of a flag from its argparse attribute name.
+
+    Args:
+        attribute (str): Attribute name, such as "post_delete_only".
+
+    Returns:
+        str: The flag as typed, such as "--post-delete-only".
+    """
+    return "--" + attribute.replace("_", "-")
+
+
+def _apply_content_mode(preferences: UserPreferences, item_type: str, mode: str) -> None:
+    """
+    Set the three mutually exclusive handling flags for one kind of content.
+
+    Args:
+        preferences (UserPreferences): Preferences to update in place.
+        item_type (str): Either "comments" or "posts".
+        mode (str): One of "delete" (edit, then delete), "delete_only" (delete
+            without editing first) or "edit_only" (edit without deleting).
+    """
+    setattr(preferences, f"delete_{item_type}", mode == "delete")
+    setattr(preferences, f"delete_without_edit_{item_type}", mode == "delete_only")
+    setattr(preferences, f"only_edit_{item_type}", mode == "edit_only")
+
+
+def resolve_content_modes(args: argparse.Namespace) -> Dict[str, Optional[str]]:
+    """
+    Work out which handling mode was asked for per kind of content.
+
+    The unprefixed flags set both kinds at once, while the --comment-* and
+    --post-* flags set one kind each and can be combined with each other. Mixing
+    an unprefixed flag with a prefixed one is contradictory and rejected.
+
+    Args:
+        args (argparse.Namespace): Parsed command line arguments.
+
+    Returns:
+        Dict[str, Optional[str]]: Mode per content type, None where the command
+            line asked for nothing and the config decides.
+
+    Raises:
+        SystemExit: If a flag for both kinds is combined with a per-kind flag.
+    """
+    both = next((mode for mode in MODES if getattr(args, mode)), None)
+    per_type = {
+        item_type: next((mode for mode in MODES if getattr(args, f"{prefix}_{mode}")), None)
+        for item_type, prefix in CONTENT_TYPES
+    }
+
+    if both and any(per_type.values()):
+        prefixed = []
+        for item_type, prefix in CONTENT_TYPES:
+            if per_type[item_type]:
+                prefixed.append(_flag_name(f"{prefix}_{per_type[item_type]}"))
+        print(f"{_flag_name(both)} already covers both comments and posts, so it cannot be "
+              f"combined with {', '.join(prefixed)}.\n"
+              "Use only the --comment-* and --post-* flags to handle the two differently.")
+        sys.exit(1)
+
+    return {item_type: per_type[item_type] or both for item_type, _ in CONTENT_TYPES}
+
+
+def _merge_subreddits(existing: List[str], added: List[str]) -> List[str]:
+    """
+    Add subreddits to a list, keeping the order and ignoring case-insensitive duplicates.
+
+    Args:
+        existing (List[str]): Subreddits already on the list.
+        added (List[str]): Subreddits to add.
+
+    Returns:
+        List[str]: The merged list.
+    """
+    merged = list(existing)
+    seen = {sub.lower() for sub in merged}
+    for sub in added:
+        if sub.lower() not in seen:
+            seen.add(sub.lower())
+            merged.append(sub)
+    return merged
+
+
+def _split_subreddits(existing: List[str], removed: List[str]) -> Tuple[List[str], List[str]]:
+    """
+    Split a list of subreddits into the ones to keep and the ones to drop.
+
+    Args:
+        existing (List[str]): Subreddits currently on the list.
+        removed (List[str]): Subreddits to drop, matched without regard to case.
+
+    Returns:
+        Tuple[List[str], List[str]]: The kept subreddits and the dropped ones,
+            spelled as they were on the original list.
+    """
+    drop = {sub.lower() for sub in removed}
+    kept = [sub for sub in existing if sub.lower() not in drop]
+    dropped = [sub for sub in existing if sub.lower() in drop]
+    return kept, dropped
+
+
+def apply_subreddit_filters(preferences: UserPreferences, args: argparse.Namespace) -> None:
+    """
+    Apply the subreddit filter given on the command line to the config's lists.
+
+    Whitelisting and blacklisting are mutually exclusive, so --whitelist and
+    --blacklist replace both lists. The --add-* flags instead build on whatever
+    the config set: adding to the list already in use, or, when the config uses
+    the opposite list, removing the named subreddits from it. Dropping a
+    subreddit from a blacklist stops it being processed, which is what
+    whitelisting it means, and dropping one from a whitelist starts it being
+    processed, which is what blacklisting it means.
+
+    Args:
+        preferences (UserPreferences): Preferences holding the config's lists,
+            updated in place.
+        args (argparse.Namespace): Parsed command line arguments.
+
+    Raises:
+        SystemExit: If --add-whitelist would empty the config's blacklist,
+            leaving no subreddit to process.
+    """
+    if args.whitelist:
+        preferences.whitelist_subreddits = _merge_subreddits([], args.whitelist)
+        preferences.blacklist_subreddits = []
+    elif args.blacklist:
+        preferences.blacklist_subreddits = _merge_subreddits([], args.blacklist)
+        preferences.whitelist_subreddits = []
+    elif args.add_whitelist:
+        if preferences.blacklist_subreddits:
+            kept, dropped = _split_subreddits(preferences.blacklist_subreddits, args.add_whitelist)
+            if not kept:
+                print("--add-whitelist would remove every subreddit from the config's blacklist, "
+                      "leaving nothing to process.\nPass --whitelist to replace the lists instead.")
+                sys.exit(1)
+            if dropped:
+                print(f"The config uses a blacklist, so --add-whitelist removes "
+                      f"{', '.join(dropped)} from it.")
+            preferences.blacklist_subreddits = kept
+        else:
+            preferences.whitelist_subreddits = _merge_subreddits(
+                preferences.whitelist_subreddits, args.add_whitelist
+            )
+    elif args.add_blacklist:
+        if preferences.whitelist_subreddits:
+            kept, dropped = _split_subreddits(preferences.whitelist_subreddits, args.add_blacklist)
+            if dropped:
+                print(f"The config uses a whitelist, so --add-blacklist removes "
+                      f"{', '.join(dropped)} from it.")
+            if not kept:
+                print("The whitelist is now empty, so every subreddit will be processed.")
+            preferences.whitelist_subreddits = kept
+        else:
+            preferences.blacklist_subreddits = _merge_subreddits(
+                preferences.blacklist_subreddits, args.add_blacklist
+            )
+
+
 def build_preferences(args: argparse.Namespace, config_options: dict) -> UserPreferences:
     """
     Build the preferences for a run from the stored config and command line.
@@ -108,44 +273,23 @@ def build_preferences(args: argparse.Namespace, config_options: dict) -> UserPre
 
     Returns:
         UserPreferences: The preferences the run will use.
+
+    Raises:
+        SystemExit: If the modifier flags given contradict each other.
     """
     preferences = UserPreferences()
     config_manager.apply_config(preferences, config_options)
 
-    if args.delete:
-        preferences.delete_comments = True
-        preferences.delete_posts = True
-        preferences.only_edit_comments = False
-        preferences.only_edit_posts = False
-        preferences.delete_without_edit_comments = False
-        preferences.delete_without_edit_posts = False
-    elif args.delete_only:
-        preferences.delete_without_edit_comments = True
-        preferences.delete_without_edit_posts = True
-        preferences.delete_comments = False
-        preferences.delete_posts = False
-        preferences.only_edit_comments = False
-        preferences.only_edit_posts = False
-    elif args.edit_only:
-        preferences.only_edit_comments = True
-        preferences.only_edit_posts = True
-        preferences.delete_comments = False
-        preferences.delete_posts = False
-        preferences.delete_without_edit_comments = False
-        preferences.delete_without_edit_posts = False
+    for item_type, mode in resolve_content_modes(args).items():
+        if mode:
+            _apply_content_mode(preferences, item_type, mode)
 
     if args.dry_run:
         preferences.dry_run = True
+    elif args.no_dry_run:
+        preferences.dry_run = False
 
-    # Whitelisting and blacklisting are mutually exclusive, so a list given on the
-    # command line replaces both lists from the config rather than adding to them.
-    if args.whitelist:
-        preferences.whitelist_subreddits = args.whitelist
-        preferences.blacklist_subreddits = []
-
-    if args.blacklist:
-        preferences.blacklist_subreddits = args.blacklist
-        preferences.whitelist_subreddits = []
+    apply_subreddit_filters(preferences, args)
 
     return preferences
 
@@ -275,19 +419,59 @@ def main():
     # Parse arguments
     parser = argparse.ArgumentParser(prog="ereddicator", description="EreddicatorCLI")
     
-    action_group = parser.add_mutually_exclusive_group()
-    action_group.add_argument("--delete", action="store_true", help="Delete content after editing")
-    action_group.add_argument("--delete-only", action="store_true", help="Delete content without editing")
-    action_group.add_argument("--edit-only", action="store_true", help="Only edit content without deleting")
-    
-    parser.add_argument("--dry-run", action="store_true", help="Enable dry run mode (no actual changes made)")
     parser.add_argument(
         "-y", "--yes", action="store_true",
         help="Skip the summary confirmation prompt and start the run immediately"
     )
-    list_group = parser.add_mutually_exclusive_group()
-    list_group.add_argument("--whitelist", nargs="+", help="List of subreddits to preserve (not process)")
-    list_group.add_argument("--blacklist", nargs="+", help="List of subreddits to exclusively process")
+
+    modifier_group = parser.add_argument_group(
+        "modifiers",
+        "Override how this run treats your content. The unprefixed handling flags cover both "
+        "comments and posts, while the --comment-* and --post-* flags cover one kind each and "
+        "may be combined with each other."
+    )
+
+    action_group = modifier_group.add_mutually_exclusive_group()
+    action_group.add_argument("--delete", action="store_true",
+                              help="Edit comments and posts, then delete them")
+    action_group.add_argument("--delete-only", action="store_true",
+                              help="Delete comments and posts without editing them first")
+    action_group.add_argument("--edit-only", action="store_true",
+                              help="Edit comments and posts without deleting them")
+
+    comment_group = modifier_group.add_mutually_exclusive_group()
+    comment_group.add_argument("--comment-delete", action="store_true",
+                               help="Edit comments, then delete them")
+    comment_group.add_argument("--comment-delete-only", action="store_true",
+                               help="Delete comments without editing them first")
+    comment_group.add_argument("--comment-edit-only", action="store_true",
+                               help="Edit comments without deleting them")
+
+    post_group = modifier_group.add_mutually_exclusive_group()
+    post_group.add_argument("--post-delete", action="store_true",
+                            help="Edit posts, then delete them")
+    post_group.add_argument("--post-delete-only", action="store_true",
+                            help="Delete posts without editing them first")
+    post_group.add_argument("--post-edit-only", action="store_true",
+                            help="Edit posts without deleting them")
+
+    dry_run_group = modifier_group.add_mutually_exclusive_group()
+    dry_run_group.add_argument("--dry-run", action="store_true",
+                               help="Enable dry run mode (no actual changes made)")
+    dry_run_group.add_argument("--no-dry-run", action="store_true",
+                               help="Disable dry run mode enabled by the config (changes are made for real)")
+
+    list_group = modifier_group.add_mutually_exclusive_group()
+    list_group.add_argument("--whitelist", nargs="+", metavar="SUBREDDIT",
+                            help="Subreddits to preserve (not process), replacing the config's lists")
+    list_group.add_argument("--add-whitelist", nargs="+", metavar="SUBREDDIT",
+                            help="Also preserve these subreddits: added to the config's whitelist, "
+                                 "or removed from its blacklist")
+    list_group.add_argument("--blacklist", nargs="+", metavar="SUBREDDIT",
+                            help="Subreddits to exclusively process, replacing the config's lists")
+    list_group.add_argument("--add-blacklist", nargs="+", metavar="SUBREDDIT",
+                            help="Also process these subreddits: added to the config's blacklist, "
+                                 "or removed from its whitelist")
 
     user_group = parser.add_argument_group("user management")
     user_group.add_argument(

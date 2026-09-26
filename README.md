@@ -28,6 +28,7 @@ This Python CLI app allows you to edit and/or delete all your Reddit comments, p
   - Hidden posts
 - **Reddit Data Export Support**: You can process content from Reddit's data export. Although it requires more effort on your part, it is ***highly recommended*** you take advantage of this feature as it ensures all of your content is processed. See [Reddit Data Export Request](#reddit-data-export-request) for instructions.
 - **OAuth Authentication Support**: For users who log in to Reddit via Google ("Login with Google"), you can authenticate via OAuth.
+- **Per-Kind Handling**: Comments and posts can be handled the same way with one flag (`--delete`, `--delete-only`, `--edit-only`) or differently with the `--comment-*` and `--post-*` flags, so you can, say, edit your comments while deleting your posts outright.
 - **Edit-Only Mode**: For comments and posts, you can choose to only edit the content without deleting it. This is ***highly recommended*** for a couple of reasons:
   - Reddit is capable of restoring deleted content, but if you edit content first and leave it edited for some time, any future restoration would likely recover the edited version rather than the original content.
   - Web crawlers and archives that previously captured your content may overwrite their records with your edited version.
@@ -38,6 +39,7 @@ This Python CLI app allows you to edit and/or delete all your Reddit comments, p
 - **Subreddit Filtering**:
   - Whitelist: Specify subreddits to exclude from processing.
   - Blacklist: Specify subreddits to exclusively process, ignoring all others.
+  - The `--add-whitelist` and `--add-blacklist` arguments adjust the list a config already sets instead of replacing it. See [Modifiers](#modifiers).
 - **Date Range Filtering**: Set a specific date range to process content from, allowing you to target content from a particular time period.
 - **Dry Run Mode**: Simulate the removal process without actually making any changes. In this mode, Ereddicator will print out what actions would be taken (e.g. what comments and posts will be deleted) without modifying any of your Reddit content.
 - **Custom Replacement Text**: Specify custom text to replace your content during editing or before deletion. If not provided, random text will be used.
@@ -51,9 +53,13 @@ This Python CLI app allows you to edit and/or delete all your Reddit comments, p
 You can run the script with the following arguments to set or override preferences:
 
 ```text
-usage: ereddicator [-h] [--delete | --delete-only | --edit-only] [--dry-run]
-                   [-y] [--whitelist WHITELIST [WHITELIST ...] | --blacklist BLACKLIST
-                   [BLACKLIST ...]] [-u NAME]
+usage: ereddicator [-h] [-y] [--delete | --delete-only | --edit-only]
+                   [--comment-delete | --comment-delete-only | --comment-edit-only]
+                   [--post-delete | --post-delete-only | --post-edit-only]
+                   [--dry-run | --no-dry-run] [--whitelist SUBREDDIT [SUBREDDIT ...] |
+                   --add-whitelist SUBREDDIT [SUBREDDIT ...] | --blacklist SUBREDDIT
+                   [SUBREDDIT ...] | --add-blacklist SUBREDDIT [SUBREDDIT ...]]
+                   [-u NAME]
                    [--new-user | --remove-user NAME | --list-users | --set-default-user NAME]
                    [-c NAME] [--no-config]
                    [--new-config | --remove-config NAME | --list-configs |
@@ -64,16 +70,39 @@ EreddicatorCLI
 
 options:
   -h, --help            show this help message and exit
-  --delete              Delete content after editing
-  --delete-only         Delete content without editing
-  --edit-only           Only edit content without deleting
-  --dry-run             Enable dry run mode (no actual changes made)
   -y, --yes             Skip the summary confirmation prompt and start the run
                         immediately
-  --whitelist WHITELIST [WHITELIST ...]
-                        List of subreddits to preserve (not process)
-  --blacklist BLACKLIST [BLACKLIST ...]
-                        List of subreddits to exclusively process
+
+modifiers:
+  Override how this run treats your content. The unprefixed handling flags cover
+  both comments and posts, while the --comment-* and --post-* flags cover one kind
+  each and may be combined with each other.
+
+  --delete              Edit comments and posts, then delete them
+  --delete-only         Delete comments and posts without editing them first
+  --edit-only           Edit comments and posts without deleting them
+  --comment-delete      Edit comments, then delete them
+  --comment-delete-only
+                        Delete comments without editing them first
+  --comment-edit-only   Edit comments without deleting them
+  --post-delete         Edit posts, then delete them
+  --post-delete-only    Delete posts without editing them first
+  --post-edit-only      Edit posts without deleting them
+  --dry-run             Enable dry run mode (no actual changes made)
+  --no-dry-run          Disable dry run mode enabled by the config (changes are made
+                        for real)
+  --whitelist SUBREDDIT [SUBREDDIT ...]
+                        Subreddits to preserve (not process), replacing the config's
+                        lists
+  --add-whitelist SUBREDDIT [SUBREDDIT ...]
+                        Also preserve these subreddits: added to the config's
+                        whitelist, or removed from its blacklist
+  --blacklist SUBREDDIT [SUBREDDIT ...]
+                        Subreddits to exclusively process, replacing the config's
+                        lists
+  --add-blacklist SUBREDDIT [SUBREDDIT ...]
+                        Also process these subreddits: added to the config's
+                        blacklist, or removed from its whitelist
 
 user management:
   -u NAME, --user NAME  Name of the stored user to use for this run (defaults to the
@@ -86,6 +115,9 @@ user management:
                         is omitted, then exit
 
 configuration:
+  Named configs are stored in a JSON config file and can set more options than the
+  arguments above expose. Any argument given on the command line overrides the
+  config. Which account to run against is not part of a config: use -u/--user.
 
   -c NAME, --config NAME
                         Name of the stored config to use for this run (defaults to the
@@ -102,6 +134,40 @@ configuration:
   --config-options      List every option a config can set, then exit
   --edit-config         Open the config file in $EDITOR, then exit
 ```
+
+### Modifiers
+
+The arguments in the `modifiers` group change what a single run does. They override whatever the config in use sets (see [Configuration Files](#configuration-files)); anything they don't mention is left as the config had it.
+
+**Handling comments and posts**
+
+`--delete`, `--delete-only` and `--edit-only` set both comments and posts at once. The `--comment-*` and `--post-*` variants set one kind each, and can be combined with each other to treat the two differently:
+
+```bash
+ereddicator --comment-edit-only --post-delete-only
+```
+
+Within each of the three sets the arguments are mutually exclusive, and an unprefixed argument cannot be combined with a prefixed one, since it already covers both kinds. A prefixed argument overrides the config for that kind only, so `--post-edit-only` against a config that deletes both leaves comments being deleted.
+
+**Dry run**
+
+`--dry-run` simulates the run without changing anything on Reddit. `--no-dry-run` is its opposite: it turns off a dry run that the config switched on, so the run makes real changes. They are mutually exclusive.
+
+**Subreddit lists**
+
+Whitelisting and blacklisting are mutually exclusive, so `--whitelist` and `--blacklist` replace both lists from the config. The `--add-*` arguments build on what the config set instead:
+
+| Config | `--add-whitelist aww` | `--add-blacklist aww` |
+| --- | --- | --- |
+| no lists | whitelist becomes `aww` | blacklist becomes `aww` |
+| whitelist | `aww` is added to the whitelist | `aww` is removed from the whitelist |
+| blacklist | `aww` is removed from the blacklist | `aww` is added to the blacklist |
+
+Removing from the opposite list achieves the same thing as adding to the one asked for: dropping a subreddit from a blacklist stops it being processed, which is what whitelisting it means, and dropping one from a whitelist starts it being processed, which is what blacklisting it means. Subreddit names are matched without regard to case.
+
+Two results are worth knowing about. If `--add-blacklist` empties the config's whitelist, nothing is filtered any more and every subreddit is processed; Ereddicator says so in the run summary. If `--add-whitelist` would empty the config's blacklist there would be nothing left to process at all, so Ereddicator reports the problem and exits instead — pass `--whitelist` to replace the lists outright if that is what you meant.
+
+All four are mutually exclusive with each other.
 
 ### Managing users
 
